@@ -69,22 +69,34 @@ class WorkflowConfig:
     raw_width: int = 1024
     raw_height: int = 1024
 
+
     def __post_init__(self) -> None:
-        self.workflow = self.workflow.strip()
         if self.workflow not in WORKFLOWS:
-            raise InputValidationError(f"workflow must be one of: {', '.join(sorted(WORKFLOWS))}")
+            raise InputValidationError(
+                f"workflow must be one of {sorted(WORKFLOWS)}, got {self.workflow!r}"
+            )
+
         if self.tracking_method not in TRACKING_METHODS:
-            raise InputValidationError("tracking_method must be one of: box, centroid, pole")
+            raise InputValidationError(
+                f"tracking_method must be one of {sorted(TRACKING_METHODS)}, "
+                f"got {self.tracking_method!r}"
+            )
+
         if self.export_format not in EXPORT_FORMATS:
-            raise InputValidationError("format must be one of: csv, json")
+            raise InputValidationError(
+                f"export_format must be one of {sorted(EXPORT_FORMATS)}, "
+                f"got {self.export_format!r}"
+            )
+
+        if self.raw_width <= 0 or self.raw_height <= 0:
+            raise InputValidationError("raw_width and raw_height must be positive")
+
         self.input_path = normalize_path(self.input_path)
         self.output_path = normalize_path(self.output_path)
-        if not isinstance(self.model, ModelConfig):
-            raise InputValidationError("model must be a ModelConfig")
-        if not isinstance(self.raw_width, int) or not isinstance(self.raw_height, int):
-            raise InputValidationError("raw dimensions must be integers")
-        if self.raw_width <= 0 or self.raw_height <= 0:
-            raise InputValidationError("raw dimensions must be positive integers")
+
+        if self.prompts is None:
+            self.prompts = PromptConfig()
+
 
     @property
     def workflow_type(self) -> str:
