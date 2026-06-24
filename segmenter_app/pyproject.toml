@@ -34,4 +34,4 @@ vimsam-segmenter = "src.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["src*", "vimsam_segmenter*"]
+include = ["src*"]

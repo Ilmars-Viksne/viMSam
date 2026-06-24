@@ -45,4 +45,6 @@ result = SegmenterApp().run(
 
 ## Migration Notes
 
-`segmenter_app/main.py` is now a compatibility wrapper around `src.cli`. The segmentation workflow logic lives directly under `segmenter_app/src`; invalid point strings and raw file size mismatches now raise clear CLI errors instead of being silently ignored or partially read.
+The application logic lives under `segmenter_app/src`.
+The command-line entry point `vimsam-segmenter` calls `src.cli:main` directly.
+The legacy `vimsam_segmenter` compatibility package has been removed.
