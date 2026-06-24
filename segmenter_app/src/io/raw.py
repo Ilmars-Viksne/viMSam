@@ -4,7 +4,7 @@ from pathlib import Path
 
 import numpy as np
 
-from vimsam_segmenter.core.errors import InputValidationError
+from ..core.errors import InputValidationError
 from .local import ensure_input_dir, ensure_input_file
 
 

@@ -1,108 +1,107 @@
+from __future__ import annotations
+
 import numpy as np
-import os
 from tqdm import tqdm
-from .base import BaseWorkflow
-from src.core.config import WorkflowConfig, SegmentationResult
-from src.core.io import IOFactory
-from src.utils import setup_logger, StatsCollector, get_box_from_mask, get_centroid, get_pole_of_inaccessibility, create_visualization
-from src.processors import PreProcessor
-from micro_sam.instance_segmentation import AutomaticMaskGenerator
-from src.utils.raw_reader import read_u3cmos_raw, get_raw_timeseries_files
+
+from ..core.config import SegmentationResult, WorkflowConfig
+from ..io.local import output_dir_for, save_image, save_records, save_video
+from ..io.raw import get_raw_timeseries_files, read_u3cmos_raw, validate_raw_timeseries_files
+from ..processing.preprocess import PreProcessor
+from ..utils.geometry import get_box_from_mask, get_centroid, get_pole_of_inaccessibility
+from ..utils.logging import setup_logger
+from ..utils.stats import StatsCollector
+from ..utils.visualization import create_visualization
+
+from .base import BaseWorkflow, automatic_mask_generator
 
 logger = setup_logger("RawTimeSeriesWorkflow")
 
+
 class RawTimeSeriesWorkflow(BaseWorkflow):
     def run(self, config: WorkflowConfig) -> SegmentationResult:
-        # Input URI is expected to be a directory containing raw files
-        files = get_raw_timeseries_files(config.input_uri)
+        files = get_raw_timeseries_files(config.input_path)
         if not files:
-            logger.error(f"No files found in {config.input_uri}")
             return SegmentationResult(False, 0, "No raw files found.")
+        validate_raw_timeseries_files(files, width=config.raw_width, height=config.raw_height)
 
-        sink = IOFactory.get_sink(config.output_uri)
-        fps = 5 # Default FPS for output video
-
+        output_dir = output_dir_for(config.output_path)
         predictor = self.model_service.get_predictor()
         pre = PreProcessor()
         stats = StatsCollector()
-
         current_logits = None
         current_mask = None
-        is_tracking = config.prompts is not None
-        points = np.array(config.prompts.points) if (is_tracking and config.prompts.points) else None
+        is_tracking = bool(config.prompts and config.prompts.points)
+        points = np.array(config.prompts.points) if is_tracking else None
+        mask_frames: list[np.ndarray] = []
+        combined_frames: list[np.ndarray] = []
+        outputs = []
 
-        mask_frames = []
-        combined_frames =[]
-        count = 0
-
-        logger.info(f"Starting raw time-series processing. Found {len(files)} frames. Tracking: {is_tracking}")
+        logger.info("Starting raw time-series processing. Found %s frames. Tracking: %s", len(files), is_tracking)
 
         for i, filepath in tqdm(enumerate(files), desc="Processing Raw Series", total=len(files)):
-            # Read and preprocess raw frame
-            frame = read_u3cmos_raw(filepath)
+            frame = read_u3cmos_raw(filepath, width=config.raw_width, height=config.raw_height)
             processed_frame = pre.run(frame)
-
-            img_sam = np.stack((processed_frame,) * 3, axis=-1) if processed_frame.ndim == 2 else processed_frame
-            predictor.set_image(img_sam)
-
+            predictor.set_image(self.sam_image(processed_frame))
             prompt_viz = None
             iou = 0.0
 
             if is_tracking:
                 if i == 0:
                     masks, ious, logits = predictor.predict(
-                        point_coords=points, point_labels=np.ones(len(points), dtype=int), multimask_output=False
+                        point_coords=points,
+                        point_labels=np.ones(len(points), dtype=int),
+                        multimask_output=False,
                     )
-                    current_mask, current_logits, iou = masks[0], logits, float(ious[0])
-                    if config.show_prompts: prompt_viz = {'type': 'point', 'data': points}
+                    current_mask = masks[0]
+                    current_logits = logits
+                    iou = float(ious[0])
+                    if config.show_prompts:
+                        prompt_viz = {"type": "point", "data": points}
+                elif current_mask is not None and np.any(current_mask):
+                    next_point, next_box = self._next_prompt(current_mask, config.tracking_method)
+                    if config.show_prompts:
+                        prompt_viz = {"type": "box", "data": next_box} if next_box is not None else {"type": "point", "data": next_point}
+                    masks, ious, logits = predictor.predict(
+                        point_coords=next_point,
+                        point_labels=np.ones(1) if next_point is not None else None,
+                        box=next_box[None, :] if next_box is not None else None,
+                        mask_input=current_logits,
+                        multimask_output=False,
+                    )
+                    current_mask = masks[0]
+                    current_logits = logits
+                    iou = float(ious[0])
                 else:
-                    if current_mask is not None and np.any(current_mask):
-                        next_point, next_box = None, None
-                        if config.tracking_method == 'box':
-                            next_box = get_box_from_mask(current_mask, padding=20)
-                            if config.show_prompts: prompt_viz = {'type': 'box', 'data': next_box}
-                        elif config.tracking_method == 'centroid':
-                            pt = get_centroid(current_mask)
-                            if pt: next_point = np.array([pt])
-                            if config.show_prompts: prompt_viz = {'type': 'point', 'data': next_point}
-                        elif config.tracking_method == 'pole':
-                            pt = get_pole_of_inaccessibility(current_mask)
-                            if pt: next_point = np.array([pt])
-                            if config.show_prompts: prompt_viz = {'type': 'point', 'data': next_point}
-
-                        masks, ious, logits = predictor.predict(
-                            point_coords=next_point, point_labels=np.ones(1) if next_point is not None else None,
-                            box=next_box[None, :] if next_box is not None else None, mask_input=current_logits, multimask_output=False
-                        )
-                        current_mask, current_logits, iou = masks[0], logits, float(ious[0])
-                    else:
-                        current_mask = np.zeros(processed_frame.shape[:2], dtype=bool)
-
-                stats.collect(current_mask, iou, i, 1, meta={"filename": os.path.basename(filepath)})
+                    current_mask = np.zeros(processed_frame.shape[:2], dtype=bool)
+                stats.collect(current_mask, iou, i, 1, meta={"filename": filepath.name})
                 result = current_mask
             else:
-                amg = AutomaticMaskGenerator(predictor)
+                amg = automatic_mask_generator(predictor)
                 amg.initialize(processed_frame, verbose=False)
                 result = amg.generate()
 
-            # Save Visualizations
             mask_viz = create_visualization(processed_frame, result, prompts=prompt_viz, save_combined=False)
-            sink.save_image(mask_viz, f"frame_{i:05d}.png")
+            outputs.append(save_image(output_dir / f"frame_{i:05d}.png", mask_viz))
             mask_frames.append(mask_viz)
 
             if config.save_combined:
                 combined_viz = create_visualization(processed_frame, result, prompts=prompt_viz, save_combined=True)
-                sink.save_image(combined_viz, f"frame_{i:05d}_combined.png")
+                outputs.append(save_image(output_dir / f"frame_{i:05d}_combined.png", combined_viz))
                 combined_frames.append(combined_viz)
 
-            count += 1
-
-        # Compile Output Videos
-        sink.save_video(mask_frames, "result_video.mp4", fps)
+        outputs.append(save_video(output_dir / "result_video.mp4", mask_frames, 5))
         if config.save_combined and combined_frames:
-            sink.save_video(combined_frames, "result_video_combined.mp4", fps)
+            outputs.append(save_video(output_dir / "result_video_combined.mp4", combined_frames, 5))
 
-        if is_tracking:
-            sink.save_stats(stats.get_data(), "tracking_stats", config.export_format)
+        stats_path = save_records(output_dir / "tracking_stats", stats.get_data(), config.export_format) if is_tracking else None
+        return SegmentationResult(True, len(mask_frames), outputs=tuple(outputs), stats_path=stats_path)
 
-        return SegmentationResult(True, count)
+    @staticmethod
+    def _next_prompt(mask: np.ndarray, method: str) -> tuple[np.ndarray | None, np.ndarray | None]:
+        if method == "box":
+            return None, get_box_from_mask(mask, padding=20)
+        if method == "centroid":
+            pt = get_centroid(mask)
+            return (np.array([pt]) if pt else None), None
+        pt = get_pole_of_inaccessibility(mask)
+        return (np.array([pt]) if pt else None), None

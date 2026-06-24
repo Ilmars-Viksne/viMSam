@@ -1,87 +1,55 @@
-import numpy as np
-import os
-from .base import BaseWorkflow
-from src.core.config import WorkflowConfig, SegmentationResult
-from src.core.io import IOFactory
-from src.utils import setup_logger, StatsCollector, create_visualization
-from src.processors import PreProcessor
-from micro_sam.instance_segmentation import AutomaticMaskGenerator
+from __future__ import annotations
 
-logger = setup_logger("SingleImageWorkflow")
+import numpy as np
+
+from ..core.config import SegmentationResult, WorkflowConfig
+from ..io.local import load_image, resolve_image_output, save_image, save_records, sibling_with_suffix
+from ..processing.preprocess import PreProcessor
+from ..utils.stats import StatsCollector
+from ..utils.visualization import create_visualization
+
+from .base import BaseWorkflow, automatic_mask_generator
+
 
 class SingleImageWorkflow(BaseWorkflow):
     def run(self, config: WorkflowConfig) -> SegmentationResult:
-        source = IOFactory.get_source(config.input_uri)
-        sink = IOFactory.get_sink(config.output_uri)
-
-        image = source.load_image()
-        pre = PreProcessor()
-        processed = pre.run(image)
-
-        if processed.ndim == 2:
-            img_sam = np.stack((processed,) * 3, axis=-1)
-        else:
-            img_sam = processed
-
+        image = load_image(config.input_path)
+        processed = PreProcessor().run(image)
         predictor = self.model_service.get_predictor()
-        predictor.set_image(img_sam)
+        predictor.set_image(self.sam_image(processed))
 
         stats = StatsCollector()
         prompt_viz = None
+        stats_path = None
 
         if config.prompts and config.prompts.points:
             points = np.array(config.prompts.points)
-            if config.show_prompts: prompt_viz = {'type': 'point', 'data': points}
-
+            if config.show_prompts:
+                prompt_viz = {"type": "point", "data": points}
             masks_list = []
             for i, pt in enumerate(points):
                 masks, ious, _ = predictor.predict(
                     point_coords=np.array([pt]),
                     point_labels=np.array([1]),
-                    multimask_output=False
+                    multimask_output=False,
                 )
                 mask = masks[0]
-                stats.collect(mask, float(ious[0]), 0, i+1)
+                stats.collect(mask, float(ious[0]), 0, i + 1)
                 masks_list.append(mask)
-
             result = np.array(masks_list)
-            sink.save_stats(stats.get_data(), "image_stats", config.export_format)
         else:
-            amg = AutomaticMaskGenerator(predictor)
+            amg = automatic_mask_generator(predictor)
             amg.initialize(processed, verbose=False)
             result = amg.generate()
 
-        # --- Determine Output Filename ---
-        user_filename = os.path.basename(config.output_uri)
-        user_ext = os.path.splitext(user_filename)[1]
+        out_path = resolve_image_output(config.output_path, config.input_path)
+        outputs = [save_image(out_path, create_visualization(processed, result, prompts=prompt_viz, save_combined=False))]
 
-        if user_ext:
-            out_name = user_filename
-        else:
-            fname = os.path.basename(config.input_uri)
-            name_no_ext = os.path.splitext(fname)[0]
-            out_name = f"res_{name_no_ext}.png"
-
-        # --- 1. ALWAYS Save Raw Mask ---
-        mask_viz = create_visualization(
-            processed,
-            result,
-            prompts=prompt_viz,
-            save_combined=False
-        )
-        sink.save_image(mask_viz, out_name)
-
-        # --- 2. OPTIONALLY Save Combined ---
         if config.save_combined:
-            combined_viz = create_visualization(
-                processed,
-                result,
-                prompts=prompt_viz,
-                save_combined=True
-            )
-            # Create suffix name: res_image.png -> res_image_combined.png
-            root, ext = os.path.splitext(out_name)
-            out_name_combined = f"{root}_combined{ext}"
-            sink.save_image(combined_viz, out_name_combined)
+            combined_path = sibling_with_suffix(out_path, "_combined")
+            outputs.append(save_image(combined_path, create_visualization(processed, result, prompts=prompt_viz, save_combined=True)))
 
-        return SegmentationResult(True, 1)
+        if stats.get_data():
+            stats_path = save_records(out_path.parent / "image_stats", stats.get_data(), config.export_format)
+
+        return SegmentationResult(True, 1, outputs=tuple(outputs), stats_path=stats_path)

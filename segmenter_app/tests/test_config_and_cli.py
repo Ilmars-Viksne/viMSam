@@ -2,9 +2,9 @@ from pathlib import Path
 
 import pytest
 
-from vimsam_segmenter.cli import parse_points
-from vimsam_segmenter.core.config import PromptConfig, WorkflowConfig
-from vimsam_segmenter.core.errors import InputValidationError
+from src.cli import parse_points
+from src.core.config import PromptConfig, WorkflowConfig
+from src.core.errors import InputValidationError
 
 
 def test_parse_points_preserves_order():

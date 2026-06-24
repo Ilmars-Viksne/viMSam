@@ -1,11 +1,27 @@
-from abc import ABC, abstractmethod
-from src.core.config import WorkflowConfig, SegmentationResult
-from src.core.io import IOFactory
+from __future__ import annotations
 
-class BaseWorkflow(ABC):
-    def __init__(self, model_service):
+import numpy as np
+
+from ..core.config import SegmentationResult, WorkflowConfig
+
+
+class BaseWorkflow:
+    def __init__(self, model_service) -> None:
         self.model_service = model_service
 
-    @abstractmethod
     def run(self, config: WorkflowConfig) -> SegmentationResult:
-        pass
+        raise NotImplementedError
+
+    @staticmethod
+    def sam_image(processed: np.ndarray) -> np.ndarray:
+        return np.stack((processed,) * 3, axis=-1) if processed.ndim == 2 else processed
+
+
+def automatic_mask_generator(predictor):
+    try:
+        from micro_sam.instance_segmentation import AutomaticMaskGenerator
+    except ImportError as exc:
+        from ..core.errors import DependencyMissingError
+
+        raise DependencyMissingError("micro_sam is required for automatic segmentation.") from exc
+    return AutomaticMaskGenerator(predictor)

@@ -5,8 +5,8 @@ import tempfile
 from pathlib import Path
 from typing import Any, Generator
 
-from vimsam_segmenter.core.config import normalize_path
-from vimsam_segmenter.core.errors import DependencyMissingError, InputValidationError, OutputWriteError
+from ..core.config import normalize_path
+from ..core.errors import DependencyMissingError, InputValidationError, OutputWriteError
 
 
 def _imageio():

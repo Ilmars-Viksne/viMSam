@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from vimsam_segmenter.core.config import WorkflowConfig
-from vimsam_segmenter.core.model_service import ModelService
-from vimsam_segmenter.workflows import WORKFLOW_MAP
+from ..workflows import WORKFLOW_MAP
+from .config import WorkflowConfig
+from .model_service import ModelService
 
 
 class SegmenterApp:
