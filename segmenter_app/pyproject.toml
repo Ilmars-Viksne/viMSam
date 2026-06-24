@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vimsam-segmenter"
+version = "0.1.0"
+description = "MicroSAM-based segmentation workflows for images, video, and raw microscopy series."
+readme = "README.md"
+requires-python = ">=3.10,<3.12"
+dependencies = [
+    "numpy>=1.26,<2",
+    "imageio",
+    "imageio-ffmpeg",
+    "tifffile",
+    "pandas",
+    "scipy",
+    "matplotlib",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+ml = [
+    "micro_sam",
+    "torch==2.1.0",
+    "torchvision",
+]
+test = [
+    "pytest",
+]
+
+[project.scripts]
+vimsam-segmenter = "vimsam_segmenter.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["vimsam_segmenter*"]
