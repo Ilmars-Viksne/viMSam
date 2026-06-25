@@ -191,12 +191,12 @@ def write_video_streams(
     imageio = _imageio_v2()
     wrote_any = False
     try:
-        with imageio.get_writer(mask_path, fps=fps, codec="libx264") as mask_writer,
-             imageio.get_writer(combined_path, fps=fps, codec="libx264") as combined_writer:
-            for mask_frame, combined_frame in frames:
-                mask_writer.append_data(np.ascontiguousarray(mask_frame))
-                combined_writer.append_data(np.ascontiguousarray(combined_frame))
-                wrote_any = True
+        with imageio.get_writer(mask_path, fps=fps, codec="libx264") as mask_writer:
+            with imageio.get_writer(combined_path, fps=fps, codec="libx264") as combined_writer:
+                for mask_frame, combined_frame in frames:
+                    mask_writer.append_data(np.ascontiguousarray(mask_frame))
+                    combined_writer.append_data(np.ascontiguousarray(combined_frame))
+                    wrote_any = True
 
         if not wrote_any:
             raise OutputWriteError(f"Cannot write video with no frames: {_describe(mask_path)}")
