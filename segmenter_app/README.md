@@ -29,7 +29,7 @@ Raw files default to headerless 16-bit unsigned 1024x1024 input. Use `--raw-widt
 ## Python API
 
 ```python
-from src import SegmenterApp, WorkflowConfig, PromptConfig
+from vimsam_segmenter import SegmenterApp, WorkflowConfig, PromptConfig
 
 result = SegmenterApp().run(
     WorkflowConfig(
@@ -45,6 +45,6 @@ result = SegmenterApp().run(
 
 ## Migration Notes
 
-The application logic lives under `segmenter_app/src`.
-The command-line entry point `vimsam-segmenter` calls `src.cli:main` directly.
+The application logic lives under `segmenter_app/vimsam_segmenter`.
+The command-line entry point `vimsam-segmenter` calls `vimsam_segmenter.cli:main` directly.
 The legacy `vimsam_segmenter` compatibility package has been removed.

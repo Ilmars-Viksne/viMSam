@@ -1,7 +1,7 @@
 import pytest
 
-from src.core.errors import OutputWriteError
-from src.io.local import resolve_image_output, save_records
+from vimsam_segmenter.core.errors import OutputWriteError
+from vimsam_segmenter.io.local import resolve_image_output, save_records
 
 
 def test_resolve_image_output_rejects_file_as_directory(tmp_path):

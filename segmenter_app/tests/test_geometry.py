@@ -1,6 +1,6 @@
 import numpy as np
 
-from src.utils.geometry import get_box_from_mask, get_centroid, get_pole_of_inaccessibility
+from vimsam_segmenter.utils.geometry import get_box_from_mask, get_centroid, get_pole_of_inaccessibility
 
 
 def test_geometry_empty_mask_returns_none():

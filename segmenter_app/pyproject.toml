@@ -30,8 +30,8 @@ test = [
 ]
 
 [project.scripts]
-vimsam-segmenter = "src.cli:main"
+vimsam-segmenter = "vimsam_segmenter.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["src*"]
+include = ["vimsam_segmenter*"]

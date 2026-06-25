@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from src.core.errors import InputValidationError
-from src.io.raw import read_u3cmos_raw, validate_raw_file_size
+from vimsam_segmenter.core.errors import InputValidationError
+from vimsam_segmenter.io.raw import read_u3cmos_raw, validate_raw_file_size
 
 
 def test_read_raw_validates_and_returns_uint8(tmp_path):

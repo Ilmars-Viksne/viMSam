@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from src.core.errors import InputValidationError
-from src.utils.visualization import create_visualization
+from vimsam_segmenter.core.errors import InputValidationError
+from vimsam_segmenter.utils.visualization import create_visualization
 
 
 def test_mask_visualization_shape_and_dtype():
