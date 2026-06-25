@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 from pathlib import Path
-from typing import Any, Generator
+from typing import Any, Generator, Iterable
 
 from ..core.config import normalize_path
 from ..core.errors import DependencyMissingError, InputValidationError, OutputWriteError
@@ -12,6 +12,14 @@ from ..core.errors import DependencyMissingError, InputValidationError, OutputWr
 def _imageio():
     try:
         import imageio.v3 as imageio
+    except ImportError as exc:
+        raise DependencyMissingError("imageio is required for image and video I/O.") from exc
+    return imageio
+
+
+def _imageio_v2():
+    try:
+        import imageio.v2 as imageio
     except ImportError as exc:
         raise DependencyMissingError("imageio is required for image and video I/O.") from exc
     return imageio
@@ -148,18 +156,59 @@ def save_image(path: Path, image: np.ndarray) -> Path:
     return path
 
 
-def save_video(path: Path, frames: list[np.ndarray], fps: int = 5) -> Path:
-    if not frames:
-        raise OutputWriteError(f"Cannot write video with no frames: {_describe(Path(path))}")
+def write_video_stream(path: Path, frames: Iterable[np.ndarray], fps: int = 5) -> Path:
     path = normalize_path(path)
     _ensure_parent_dir(path)
+    np = _numpy()
+    imageio = _imageio_v2()
+    wrote_any = False
     try:
-        _imageio().imwrite(path, frames, fps=fps, codec="libx264")
+        with imageio.get_writer(path, fps=fps, codec="libx264") as writer:
+            for frame in frames:
+                writer.append_data(np.ascontiguousarray(frame))
+                wrote_any = True
+
+        if not wrote_any:
+            raise OutputWriteError(f"Cannot write video with no frames: {_describe(path)}")
     except DependencyMissingError:
         raise
     except Exception as exc:
         raise OutputWriteError(f"Could not write video {_describe(path)}: {exc}") from exc
     return path
+
+
+def write_video_streams(
+    mask_path: Path,
+    combined_path: Path,
+    frames: Iterable[tuple[np.ndarray, np.ndarray]],
+    fps: int = 5,
+) -> tuple[Path, Path]:
+    mask_path = normalize_path(mask_path)
+    combined_path = normalize_path(combined_path)
+    _ensure_parent_dir(mask_path)
+    _ensure_parent_dir(combined_path)
+    np = _numpy()
+    imageio = _imageio_v2()
+    wrote_any = False
+    try:
+        with imageio.get_writer(mask_path, fps=fps, codec="libx264") as mask_writer,
+             imageio.get_writer(combined_path, fps=fps, codec="libx264") as combined_writer:
+            for mask_frame, combined_frame in frames:
+                mask_writer.append_data(np.ascontiguousarray(mask_frame))
+                combined_writer.append_data(np.ascontiguousarray(combined_frame))
+                wrote_any = True
+
+        if not wrote_any:
+            raise OutputWriteError(f"Cannot write video with no frames: {_describe(mask_path)}")
+    except DependencyMissingError:
+        raise
+    except Exception as exc:
+        raise OutputWriteError(f"Could not write video {_describe(mask_path)} and {_describe(combined_path)}: {exc}") from exc
+    return mask_path, combined_path
+
+
+def save_video(path: Path, frames: Iterable[np.ndarray], fps: int = 5) -> Path:
+    return write_video_stream(path, frames, fps=fps)
 
 
 def save_records(path: Path, records: list[dict[str, Any]], export_format: str) -> Path | None:
