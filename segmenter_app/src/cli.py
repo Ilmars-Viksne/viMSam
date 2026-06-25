@@ -30,12 +30,39 @@ def parse_points(points_str: str | None) -> tuple[tuple[int, int], ...] | None:
     return tuple(points)
 
 
+def parse_box(box_str: str | None) -> tuple[int, int, int, int] | None:
+    if box_str is None or not box_str.strip():
+        return None
+
+    parts = box_str.strip().split(",")
+
+    if len(parts) != 4 or any(not part.strip() for part in parts):
+        raise argparse.ArgumentTypeError(
+            f"Invalid box '{box_str}'. Expected x1,y1,x2,y2, for example 100,150,300,400."
+        )
+
+    try:
+        x1, y1, x2, y2 = (int(part.strip()) for part in parts)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            f"Invalid box '{box_str}'. Coordinates must be integers."
+        ) from exc
+
+    if x2 <= x1 or y2 <= y1:
+        raise argparse.ArgumentTypeError(
+            f"Invalid box '{box_str}'. Expected x2 > x1 and y2 > y1."
+        )
+
+    return x1, y1, x2, y2
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="vimsam-segmenter")
     parser.add_argument("--input", required=True, help="Input file or directory for time-series workflows")
     parser.add_argument("--out", required=True, help="Output file or directory")
     parser.add_argument("--workflow", choices=["single", "video", "raw_single", "raw_timeseries"], default="single")
     parser.add_argument("--points", type=parse_points, default=None)
+    parser.add_argument("--box", type=parse_box, default=None, help="Prompt box as x1,y1,x2,y2, for example 100,150,300,400")
     parser.add_argument("--tracking_method", "--tracking-method", dest="tracking_method", choices=["box", "centroid", "pole"], default="box")
     parser.add_argument("--show_prompts", "--show-prompts", dest="show_prompts", action="store_true", help="Draw prompts on combined output")
     parser.add_argument("--save_combined", "--save-combined", dest="save_combined", action="store_true", help="Save combined original/mask/overlay output")
@@ -50,34 +77,42 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     configure_ffmpeg()
+
     parser = build_parser()
     args = parser.parse_args(argv)
 
     try:
         from .core.app import SegmenterApp
 
-        prompts = PromptConfig(points=args.points) if args.points else None
         config = WorkflowConfig(
             workflow=args.workflow,
             input_path=args.input,
             output_path=args.out,
-            model=ModelConfig(
-                model_type=args.model_type,
-                device=args.device,
-                checkpoint_path=args.checkpoint_path,
+            prompts=PromptConfig(
+                points=args.points,
+                box=args.box,
             ),
-            prompts=prompts,
             show_prompts=args.show_prompts,
             save_combined=args.save_combined,
             tracking_method=args.tracking_method,
             export_format=args.format,
             raw_width=args.raw_width,
             raw_height=args.raw_height,
+            model=ModelConfig(
+                model_type=args.model_type,
+                device=args.device,
+                checkpoint_path=args.checkpoint_path,
+            ),
         )
-        result = SegmenterApp().run(config)
-    except SegmenterError as exc:
-        parser.exit(2, f"error: {exc}\n")
 
-    if result.message:
-        print(result.message)
-    return 0 if result.success else 1
+        result = SegmenterApp().run(config)
+
+        if result.message:
+            print(result.message)
+
+        return 0 if result.success else 1
+
+    except SegmenterError as exc:
+        parser.error(str(exc))
+        return 2
+
