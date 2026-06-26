@@ -33,5 +33,5 @@ test = [
 vimsam-segmenter = "vimsam_segmenter.cli:main"
 
 [tool.setuptools.packages.find]
-where = ["."]
+where = ["src"]
 include = ["vimsam_segmenter*"]
