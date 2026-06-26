@@ -2,9 +2,9 @@ from pathlib import Path
 
 import pytest
 
-from vimsam_segmenter.cli import parse_box, parse_points
-from vimsam_segmenter.core.config import PromptConfig, WorkflowConfig
-from vimsam_segmenter.core.errors import InputValidationError
+from vimsam_segmenter.cli import main, parse_box, parse_points
+from vimsam_segmenter.core.config import PromptConfig, SegmentationResult, WorkflowConfig
+from vimsam_segmenter.core.errors import InputValidationError, SegmenterError
 
 
 def test_parse_points_preserves_order():
@@ -147,3 +147,62 @@ def test_workflow_config_rejects_invalid_export_format(tmp_path):
             output_path=tmp_path,
             export_format="xlsx",
         )
+
+
+def test_main_prints_result_details_and_returns_zero(monkeypatch, capsys, tmp_path):
+    output_path = tmp_path / "result.png"
+    stats_path = tmp_path / "stats.csv"
+
+    class DummyApp:
+        def run(self, config):
+            assert config.workflow == "single"
+            return SegmentationResult(
+                success=True,
+                message="completed",
+                outputs=(output_path,),
+                stats_path=stats_path,
+            )
+
+    monkeypatch.setattr("vimsam_segmenter.core.app.SegmenterApp", DummyApp)
+
+    exit_code = main(["--input", "input.tif", "--out", str(output_path), "--workflow", "single"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "completed" in captured.out
+    assert str(output_path) in captured.out
+    assert str(stats_path) in captured.out
+
+
+def test_main_reports_failed_result_to_stderr(monkeypatch, capsys, tmp_path):
+    output_path = tmp_path / "result.png"
+
+    class DummyApp:
+        def run(self, config):
+            return SegmentationResult(success=False, message="failed", outputs=(output_path,))
+
+    monkeypatch.setattr("vimsam_segmenter.core.app.SegmenterApp", DummyApp)
+
+    exit_code = main(["--input", "input.tif", "--out", str(output_path), "--workflow", "single"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.out == ""
+    assert "failed" in captured.err
+
+
+def test_main_handles_segmenter_errors_without_exiting(monkeypatch, capsys, tmp_path):
+    output_path = tmp_path / "result.png"
+
+    class DummyApp:
+        def run(self, config):
+            raise SegmenterError("boom")
+
+    monkeypatch.setattr("vimsam_segmenter.core.app.SegmenterApp", DummyApp)
+
+    exit_code = main(["--input", "input.tif", "--out", str(output_path), "--workflow", "single"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    assert "Error: boom" in captured.err

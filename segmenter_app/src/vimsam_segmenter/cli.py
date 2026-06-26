@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 from pathlib import Path
 from typing import Sequence
 
@@ -107,12 +108,20 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         result = SegmenterApp().run(config)
 
+        if not result.success:
+            print(result.message or "Processing failed", file=sys.stderr)
+            return 1
+
         if result.message:
             print(result.message)
+        for output in result.outputs:
+            print(output)
+        if result.stats_path is not None:
+            print(result.stats_path)
 
-        return 0 if result.success else 1
+        return 0
 
     except SegmenterError as exc:
-        parser.error(str(exc))
+        print(f"Error: {exc}", file=sys.stderr)
         return 2
 
