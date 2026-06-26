@@ -18,12 +18,13 @@ def _validate_dimensions(width: int, height: int) -> None:
 def validate_raw_file_size(path: Path, width: int = 1024, height: int = 1024) -> int:
     _validate_dimensions(width, height)
     path = ensure_input_file(path)
-    expected_size = width * height * 2
+    expected_size = width * height * np.dtype(np.uint16).itemsize
     actual_size = path.stat().st_size
     if actual_size != expected_size:
         raise InputValidationError(
-            f"Raw file size mismatch for {path}: expected {expected_size} bytes "
-            f"({width}x{height}x16-bit), got {actual_size} bytes"
+            f"Raw file size mismatch for {path}: "
+            f"expected {expected_size} bytes "
+            f"({width}x{height} uint16), got {actual_size} bytes"
         )
     return actual_size
 
@@ -31,17 +32,19 @@ def validate_raw_file_size(path: Path, width: int = 1024, height: int = 1024) ->
 def read_u3cmos_raw(path: Path, width: int = 1024, height: int = 1024) -> np.ndarray:
     path = ensure_input_file(path)
     validate_raw_file_size(path, width=width, height=height)
+    
     try:
-        raw_data = path.read_bytes()
+        data = np.fromfile(path, dtype=np.uint16)
     except OSError as exc:
         raise InputValidationError(f"Could not read raw file {path}: {exc}") from exc
 
-    image_1d = np.frombuffer(raw_data, dtype=np.uint16)
-    if image_1d.size != width * height:
+    try:
+        image_2d = data.reshape((height, width)).astype(np.float32)
+    except ValueError as exc:
         raise InputValidationError(
-            f"Raw pixel count mismatch for {path}: expected {width * height}, got {image_1d.size}"
-        )
-    image_2d = image_1d.reshape((height, width)).astype(np.float32)
+            f"Could not reshape raw file {path} to {height}x{width}"
+        ) from exc
+    
     image_2d = np.flipud(image_2d)
 
     p1, p99 = np.percentile(image_2d, (1, 99))
