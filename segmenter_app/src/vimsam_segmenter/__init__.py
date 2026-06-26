@@ -19,4 +19,4 @@ def __getattr__(name: str):
         from .core.app import SegmenterApp
 
         return SegmenterApp
-    raise AttributeError(name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

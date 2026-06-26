@@ -24,4 +24,4 @@ def __getattr__(name: str):
         from .model_service import ModelService
 
         return ModelService
-    raise AttributeError(name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

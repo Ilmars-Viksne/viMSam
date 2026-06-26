@@ -24,4 +24,4 @@ def __getattr__(name: str):
         from . import visualization
 
         return getattr(visualization, name)
-    raise AttributeError(name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
