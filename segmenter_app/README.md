@@ -45,6 +45,8 @@ result = SegmenterApp().run(
 
 ## Migration Notes
 
-The application logic lives under `segmenter_app/vimsam_segmenter`.
+The application logic lives under `segmenter_app/src/vimsam_segmenter`.
 The command-line entry point `vimsam-segmenter` calls `vimsam_segmenter.cli:main` directly.
-The legacy `vimsam_segmenter` compatibility package has been removed.
+`vimsam_segmenter` is the real Python import package, and the distribution/CLI is named `vimsam-segmenter`.
+
+`SegmenterApp().run(config)` is the shared orchestration path used by the CLI, Python API, notebooks, and tests.
