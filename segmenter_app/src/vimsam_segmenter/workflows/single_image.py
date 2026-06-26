@@ -14,7 +14,7 @@ from .base import BaseWorkflow, automatic_mask_generator
 class SingleImageWorkflow(BaseWorkflow):
     def run(self, config: WorkflowConfig) -> SegmentationResult:
         image = load_image(config.input_path)
-        processed = PreProcessor().run(image)
+        processed = PreProcessor(method=config.preprocessing_method).run(image)
         predictor = self.model_service.get_predictor()
         predictor.set_image(self.sam_image(processed))
 

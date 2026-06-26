@@ -9,6 +9,7 @@ from .errors import InputValidationError
 WORKFLOWS = {"single", "video", "raw_single", "raw_timeseries"}
 TRACKING_METHODS = {"box", "centroid", "pole"}
 EXPORT_FORMATS = {"csv", "json"}
+PREPROCESSING_METHODS = {"fixed_16bit", "minmax", "percentile", "none"}
 
 
 def normalize_path(path: Path | str) -> Path:
@@ -66,6 +67,7 @@ class WorkflowConfig:
     save_combined: bool = False
     tracking_method: str = "box"
     export_format: str = "csv"
+    preprocessing_method: str = "fixed_16bit"
     raw_width: int = 1024
     raw_height: int = 1024
 
@@ -86,6 +88,13 @@ class WorkflowConfig:
             raise InputValidationError(
                 f"export_format must be one of {sorted(EXPORT_FORMATS)}, "
                 f"got {self.export_format!r}"
+            )
+
+        self.preprocessing_method = self.preprocessing_method.strip().lower()
+        if self.preprocessing_method not in PREPROCESSING_METHODS:
+            raise InputValidationError(
+                f"preprocessing_method must be one of {sorted(PREPROCESSING_METHODS)}, "
+                f"got {self.preprocessing_method!r}"
             )
 
         if self.raw_width <= 0 or self.raw_height <= 0:

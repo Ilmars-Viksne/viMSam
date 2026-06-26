@@ -19,7 +19,7 @@ class RawSingleImageWorkflow(BaseWorkflow):
     def run(self, config: WorkflowConfig) -> SegmentationResult:
         logger.info("Reading raw image: %s", config.input_path)
         image = read_u3cmos_raw(config.input_path, width=config.raw_width, height=config.raw_height)
-        processed = PreProcessor().run(image)
+        processed = PreProcessor(method=config.preprocessing_method).run(image)
         predictor = self.model_service.get_predictor()
         predictor.set_image(self.sam_image(processed))
 

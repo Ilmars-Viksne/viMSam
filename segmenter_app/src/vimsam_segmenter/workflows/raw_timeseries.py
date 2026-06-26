@@ -26,7 +26,7 @@ class RawTimeSeriesWorkflow(BaseWorkflow):
 
         output_dir = output_dir_for(config.output_path)
         predictor = self.model_service.get_predictor()
-        pre = PreProcessor()
+        pre = PreProcessor(method=config.preprocessing_method)
         stats = StatsCollector()
         current_logits = None
         current_mask = None

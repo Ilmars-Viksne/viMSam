@@ -29,7 +29,7 @@ class VideoFileWorkflow(BaseWorkflow):
         output_dir = output_dir_for(config.output_path)
         fps = read_metadata(config.input_path).get("fps", 5)
         predictor = self.model_service.get_predictor()
-        pre = PreProcessor()
+        pre = PreProcessor(method=config.preprocessing_method)
         stats = StatsCollector()
 
         current_logits = None
