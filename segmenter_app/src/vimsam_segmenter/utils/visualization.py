@@ -61,61 +61,77 @@ def create_visualization(
     segmentation_result: object,
     prompts: dict[str, np.ndarray] | None = None,
     save_combined: bool = False,
+    show_prompts: bool = False,
 ) -> np.ndarray:
     image_disp = _normalize_display(image)
     h, w = image_disp.shape[:2]
     colored_mask = np.zeros((h, w, 3), dtype=np.uint8)
 
-    for i, raw_mask in enumerate(_extract_masks(segmentation_result)):
-        mask = _normalize_mask(raw_mask)
-        if mask.shape[:2] != (h, w):
+    masks = _extract_masks(segmentation_result)
+    for idx, raw_mask in enumerate(masks, start=1):
+        mask_2d = _normalize_mask(raw_mask)
+        if mask_2d.shape != (h, w):
             raise InputValidationError(
-                f"Mask shape {mask.shape[:2]} does not match image shape {(h, w)}"
+                f"Mask shape {mask_2d.shape} does not match image shape {(h, w)}"
             )
-        color = STABLE_PALETTE[(i % 4) + 1]
-        colored_mask[mask > 0] = color
+
+        color = STABLE_PALETTE[idx % len(STABLE_PALETTE)]
+        colored_mask[mask_2d > 0] = color
 
     if not save_combined:
-        return colored_mask
+        return np.ascontiguousarray(colored_mask)
 
-    overlay = image_disp.copy()
-    mask_indices = np.any(colored_mask > 0, axis=-1)
-    overlay[mask_indices] = (overlay[mask_indices] * 0.6 + colored_mask[mask_indices] * 0.4).astype(np.uint8)
+    # deterministic overlay blending
+    overlay = (image_disp.astype(np.float32) * 0.65 + colored_mask.astype(np.float32) * 0.35)
+    overlay = np.clip(overlay, 0, 255).astype(np.uint8)
 
-    fig = Figure(figsize=(18, 6))
-    FigureCanvasAgg(fig)
-    ax1, ax2, ax3 = fig.subplots(1, 3)
-
-    ax1.imshow(image_disp)
-    ax1.set_title("Original")
-    ax1.axis("off")
-
-    ax2.imshow(colored_mask)
-    ax2.set_title("Segmentation Mask")
-    ax2.axis("off")
-
-    ax3.imshow(overlay)
-    ax3.set_title("Overlay")
-    ax3.axis("off")
-
-    if prompts:
+    # draw prompts only when requested
+    if show_prompts and prompts:
         prompt_type = prompts.get("type")
         prompt_data = prompts.get("data")
+
+        def _draw_cross(img: np.ndarray, x: int, y: int, color=(255, 255, 255), size: int = 5):
+            x = int(round(x))
+            y = int(round(y))
+            h_, w_ = img.shape[:2]
+            for dx in range(-size, size + 1):
+                xx = x + dx
+                if 0 <= xx < w_ and 0 <= y < h_:
+                    img[y, xx] = color
+            for dy in range(-size, size + 1):
+                yy = y + dy
+                if 0 <= yy < h_ and 0 <= x < w_:
+                    img[yy, x] = color
+
+        def _draw_box(img: np.ndarray, x1: int, y1: int, x2: int, y2: int, color=(255, 255, 255), thickness: int = 2):
+            x1, y1, x2, y2 = int(round(x1)), int(round(y1)), int(round(x2)), int(round(y2))
+            h_, w_ = img.shape[:2]
+            x1, x2 = max(0, min(x1, w_ - 1)), max(0, min(x2, w_ - 1))
+            y1, y2 = max(0, min(y1, h_ - 1)), max(0, min(y2, h_ - 1))
+            for t in range(thickness):
+                # top/bottom
+                if y1 + t <= y2 - t:
+                    img[y1 + t, x1:x2 + 1] = color
+                    img[y2 - t, x1:x2 + 1] = color
+                # left/right
+                if x1 + t <= x2 - t:
+                    img[y1:y2 + 1, x1 + t] = color
+                    img[y1:y2 + 1, x2 - t] = color
+
         if prompt_type == "point" and prompt_data is not None:
             pts = np.asarray(prompt_data)
             if pts.ndim == 1:
                 pts = pts[None, :]
-            ax3.scatter(pts[:, 0], pts[:, 1], marker="x", c="white", s=100, linewidth=2)
+            for p in pts:
+                _draw_cross(overlay, p[0], p[1])
         elif prompt_type == "box" and prompt_data is not None:
             b = np.asarray(prompt_data)
-            rect = patches.Rectangle((b[0], b[1]), b[2] - b[0], b[3] - b[1], linewidth=2, edgecolor="white", facecolor="none")
-            ax3.add_patch(rect)
+            if b.size >= 4:
+                _draw_box(overlay, b[0], b[1], b[2], b[3])
 
-    fig.tight_layout()
-    fig.canvas.draw()
-    im_array = np.array(fig.canvas.buffer_rgba())[:, :, :3]
-    fig.clear()
-    return np.ascontiguousarray(im_array)
+    # side-by-side: original | mask | overlay
+    combined = np.concatenate([image_disp, colored_mask, overlay], axis=1)
+    return np.ascontiguousarray(combined)
 
 
 save_masks_as_image = create_visualization
