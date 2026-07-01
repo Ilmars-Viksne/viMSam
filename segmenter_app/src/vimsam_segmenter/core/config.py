@@ -6,7 +6,14 @@ from typing import Any
 
 from .errors import InputValidationError
 
-WORKFLOWS = {"single", "video", "raw_single", "raw_timeseries"}
+WORKFLOWS = {
+    "single",
+    "video",
+    "raw_single",
+    "raw_timeseries",
+    "image_frames_logits",
+    "raw_timeseries_logits",
+}
 TRACKING_METHODS = {"box", "centroid", "pole"}
 EXPORT_FORMATS = {"csv", "json"}
 PREPROCESSING_METHODS = {"fixed_16bit", "minmax", "percentile", "none"}
@@ -70,6 +77,7 @@ class WorkflowConfig:
     preprocessing_method: str = "fixed_16bit"
     raw_width: int = 1024
     raw_height: int = 1024
+    fps: float | None = None
 
 
     def __post_init__(self) -> None:

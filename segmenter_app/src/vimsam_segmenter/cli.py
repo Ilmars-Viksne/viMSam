@@ -61,7 +61,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="vimsam-segmenter")
     parser.add_argument("--input", required=True, help="Input file or directory for time-series workflows")
     parser.add_argument("--out", required=True, help="Output file or directory")
-    parser.add_argument("--workflow", choices=["single", "video", "raw_single", "raw_timeseries"], default="single")
+    parser.add_argument(
+        "--workflow",
+        choices=[
+            "single",
+            "video",
+            "raw_single",
+            "raw_timeseries",
+            "image_frames_logits",
+            "raw_timeseries_logits",
+        ],
+        default="single",
+    )
     parser.add_argument("--points", type=parse_points, default=None)
     parser.add_argument("--box", type=parse_box, default=None, help="Prompt box as x1,y1,x2,y2, for example 100,150,300,400")
     parser.add_argument("--tracking_method", "--tracking-method", dest="tracking_method", choices=["box", "centroid", "pole"], default="box")
@@ -74,6 +85,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--checkpoint-path", type=Path, default=None)
     parser.add_argument("--raw-width", type=int, default=1024)
     parser.add_argument("--raw-height", type=int, default=1024)
+    parser.add_argument("--fps", type=float, default=None, help="Frame rate used to compute time_seconds. First frame is 0 seconds.")
     return parser
 
 
@@ -101,6 +113,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             preprocessing_method=args.preprocessing_method,
             raw_width=args.raw_width,
             raw_height=args.raw_height,
+            fps=args.fps,
             model=ModelConfig(
                 model_type=args.model_type,
                 device=args.device,

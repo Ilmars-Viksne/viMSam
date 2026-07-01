@@ -149,6 +149,45 @@ def test_workflow_config_rejects_invalid_export_format(tmp_path):
         )
 
 
+def test_workflow_config_accepts_logits_workflows_and_fps(tmp_path):
+    config = WorkflowConfig(
+        workflow="image_frames_logits",
+        input_path="frames",
+        output_path=tmp_path / "out",
+        fps=10.5,
+    )
+
+    assert config.workflow == "image_frames_logits"
+    assert config.fps == 10.5
+
+
+def test_main_passes_fps_to_workflow_config(monkeypatch, capsys, tmp_path):
+    output_path = tmp_path / "result.png"
+
+    class DummyApp:
+        def run(self, config):
+            assert config.workflow == "raw_timeseries_logits"
+            assert config.fps == 12.5
+            return SegmentationResult(success=True, outputs=(output_path,))
+
+    monkeypatch.setattr("vimsam_segmenter.core.app.SegmenterApp", DummyApp)
+
+    exit_code = main([
+        "--input",
+        "input.raw",
+        "--out",
+        str(output_path),
+        "--workflow",
+        "raw_timeseries_logits",
+        "--fps",
+        "12.5",
+    ])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert str(output_path) in captured.out
+
+
 def test_main_prints_result_details_and_returns_zero(monkeypatch, capsys, tmp_path):
     output_path = tmp_path / "result.png"
     stats_path = tmp_path / "stats.csv"
