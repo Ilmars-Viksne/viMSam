@@ -5,6 +5,7 @@ import numpy as np
 from ..core.config import SegmentationResult, WorkflowConfig
 from ..io.local import load_image, resolve_image_output, save_image, save_records, sibling_with_suffix
 from ..processing.preprocess import PreProcessor
+from ..utils.prompts import build_prompt_overlay
 from ..utils.stats import StatsCollector
 from ..utils.visualization import create_visualization
 
@@ -19,13 +20,14 @@ class SingleImageWorkflow(BaseWorkflow):
         predictor.set_image(self.sam_image(processed))
 
         stats = StatsCollector()
-        prompt_viz = None
         stats_path = None
+        current_prompt_overlay = build_prompt_overlay(
+            points=config.prompts.points if config.prompts else None,
+            box=config.prompts.box if config.prompts else None,
+        )
 
         if config.prompts and config.prompts.points:
             points = np.array(config.prompts.points)
-            if config.show_prompts:
-                prompt_viz = {"type": "point", "data": points}
             masks_list = []
             for i, pt in enumerate(points):
                 masks, ious, _ = predictor.predict(
@@ -43,11 +45,33 @@ class SingleImageWorkflow(BaseWorkflow):
             result = amg.generate()
 
         out_path = resolve_image_output(config.output_path, config.input_path)
-        outputs = [save_image(out_path, create_visualization(processed, result, prompts=prompt_viz, save_combined=False))]
+        outputs = [
+            save_image(
+                out_path,
+                create_visualization(
+                    processed,
+                    result,
+                    prompts=None,
+                    save_combined=False,
+                    show_prompts=False,
+                ),
+            )
+        ]
 
         if config.save_combined:
             combined_path = sibling_with_suffix(out_path, "_combined")
-            outputs.append(save_image(combined_path, create_visualization(processed, result, prompts=prompt_viz, save_combined=True)))
+            outputs.append(
+                save_image(
+                    combined_path,
+                    create_visualization(
+                        processed,
+                        result,
+                        prompts=current_prompt_overlay,
+                        save_combined=True,
+                        show_prompts=config.show_prompts,
+                    ),
+                )
+            )
 
         if stats.get_data():
             stats_path = save_records(out_path.parent / "image_stats", stats.get_data(), config.export_format)

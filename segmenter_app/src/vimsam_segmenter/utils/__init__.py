@@ -1,8 +1,10 @@
 from .logging import setup_logger
+from .prompts import build_prompt_overlay
 
 __all__ = [
     "setup_logger",
     "StatsCollector",
+    "build_prompt_overlay",
     "create_visualization",
     "save_masks_as_image",
     "get_centroid",

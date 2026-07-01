@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from vimsam_segmenter.core.errors import InputValidationError
+from vimsam_segmenter.utils.prompts import build_prompt_overlay
 from vimsam_segmenter.utils.visualization import create_visualization
 
 
@@ -34,3 +35,74 @@ def test_visualization_rejects_mismatched_mask_shape():
 
     with pytest.raises(InputValidationError, match="does not match image shape"):
         create_visualization(image, mask)
+
+
+def test_mask_visualization_never_draws_prompts():
+    image = np.zeros((64, 64), dtype=np.uint8)
+    mask = np.zeros((64, 64), dtype=bool)
+    mask[20:40, 20:40] = True
+
+    prompts = build_prompt_overlay(points=((30, 30),))
+
+    clean_mask = create_visualization(
+        image,
+        mask,
+        prompts=None,
+        save_combined=False,
+        show_prompts=False,
+    )
+
+    prompted_mask_attempt = create_visualization(
+        image,
+        mask,
+        prompts=prompts,
+        save_combined=False,
+        show_prompts=True,
+    )
+
+    assert np.array_equal(clean_mask, prompted_mask_attempt)
+
+
+def test_combined_visualization_draws_prompts_when_requested():
+    image = np.zeros((64, 64), dtype=np.uint8)
+    mask = np.zeros((64, 64), dtype=bool)
+    mask[20:40, 20:40] = True
+
+    prompts = build_prompt_overlay(points=((30, 30),))
+
+    without_prompts = create_visualization(
+        image,
+        mask,
+        prompts=prompts,
+        save_combined=True,
+        show_prompts=False,
+    )
+
+    with_prompts = create_visualization(
+        image,
+        mask,
+        prompts=prompts,
+        save_combined=True,
+        show_prompts=True,
+    )
+
+    assert without_prompts.shape == with_prompts.shape
+    assert not np.array_equal(without_prompts, with_prompts)
+
+
+def test_combined_visualization_accepts_missing_prompts():
+    image = np.zeros((64, 64), dtype=np.uint8)
+    mask = np.zeros((64, 64), dtype=bool)
+    mask[20:40, 20:40] = True
+
+    combined = create_visualization(
+        image,
+        mask,
+        prompts=None,
+        save_combined=True,
+        show_prompts=True,
+    )
+
+    assert combined.ndim == 3
+    assert combined.shape[-1] == 3
+    assert combined.dtype == np.uint8

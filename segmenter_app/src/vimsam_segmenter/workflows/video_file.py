@@ -16,6 +16,7 @@ from ..io.local import (
 from ..processing.preprocess import PreProcessor
 from ..utils.geometry import get_box_from_mask, get_centroid, get_pole_of_inaccessibility
 from ..utils.logging import setup_logger
+from ..utils.prompts import build_prompt_overlay
 from ..utils.stats import StatsCollector
 from ..utils.visualization import create_visualization
 
@@ -46,7 +47,7 @@ class VideoFileWorkflow(BaseWorkflow):
             for i, frame in tqdm(enumerate(stream_video(config.input_path)), desc="Processing"):
                 processed_frame = pre.run(frame)
                 predictor.set_image(self.sam_image(processed_frame))
-                prompt_viz = None
+                current_prompt_overlay = {}
                 iou = 0.0
 
                 if is_tracking:
@@ -59,12 +60,16 @@ class VideoFileWorkflow(BaseWorkflow):
                         current_mask = masks[0]
                         current_logits = logits
                         iou = float(ious[0])
-                        if config.show_prompts:
-                            prompt_viz = {"type": "point", "data": points}
+                        current_prompt_overlay = build_prompt_overlay(
+                            points=tuple(points) if points is not None else None,
+                            box=None,
+                        )
                     elif current_mask is not None and np.any(current_mask):
                         next_point, next_box = self._next_prompt(current_mask, config.tracking_method)
-                        if config.show_prompts:
-                            prompt_viz = {"type": "box", "data": next_box} if next_box is not None else {"type": "point", "data": next_point}
+                        current_prompt_overlay = build_prompt_overlay(
+                            points=tuple(map(tuple, next_point)) if next_point is not None else None,
+                            box=tuple(next_box) if next_box is not None else None,
+                        )
                         masks, ious, logits = predictor.predict(
                             point_coords=next_point,
                             point_labels=np.ones(1) if next_point is not None else None,
@@ -84,11 +89,23 @@ class VideoFileWorkflow(BaseWorkflow):
                     amg.initialize(processed_frame, verbose=False)
                     result = amg.generate()
 
-                mask_viz = create_visualization(processed_frame, result, prompts=prompt_viz, save_combined=False)
+                mask_viz = create_visualization(
+                    processed_frame,
+                    result,
+                    prompts=None,
+                    save_combined=False,
+                    show_prompts=False,
+                )
                 outputs.append(save_image(output_dir / f"frame_{i:05d}.png", mask_viz))
 
                 if config.save_combined:
-                    combined_viz = create_visualization(processed_frame, result, prompts=prompt_viz, save_combined=True)
+                    combined_viz = create_visualization(
+                        processed_frame,
+                        result,
+                        prompts=current_prompt_overlay if config.show_prompts else None,
+                        save_combined=True,
+                        show_prompts=config.show_prompts,
+                    )
                     outputs.append(save_image(output_dir / f"frame_{i:05d}_combined.png", combined_viz))
                     yield mask_viz, combined_viz
                 else:

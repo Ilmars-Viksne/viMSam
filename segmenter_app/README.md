@@ -26,6 +26,27 @@ vimsam-segmenter --input data/input/videos/moving_cell.mp4 --out data/output/vid
 
 Raw files default to headerless 16-bit unsigned 1024x1024 input. Use `--raw-width` and `--raw-height` for other dimensions.
 
+## Prompt visualization
+
+`--show-prompts` affects only combined diagnostic outputs.
+
+- Mask images are always saved without prompt markers.
+- Combined images show point/box prompts only when both `--save-combined` and `--show-prompts` are used.
+- For time-series workflows, combined frames show the prompt used for the current frame, such as propagated centroid, pole, or box.
+
+Example:
+
+```bash
+vimsam-segmenter \
+  --input data/input/videos/ \
+  --out data/output/videos/ \
+  --workflow raw_timeseries \
+  --points "500,480" \
+  --tracking-method pole \
+  --save-combined \
+  --show-prompts
+```
+
 ## Python API
 
 ```python

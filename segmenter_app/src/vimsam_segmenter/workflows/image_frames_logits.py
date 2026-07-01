@@ -11,6 +11,7 @@ from ..processing.preprocess import PreProcessor
 from ..tracking.logit_propagation import LogitPropagationTracker
 from ..utils.geometry import get_box_from_mask, get_centroid, get_pole_of_inaccessibility
 from ..utils.logging import setup_logger
+from ..utils.prompts import build_prompt_overlay
 from ..utils.visualization import create_visualization
 
 from .base import BaseWorkflow
@@ -81,24 +82,43 @@ class ImageFrameLogitsWorkflow(BaseWorkflow):
             mask_output_path = output_dir / f"{frame_path.stem}_mask.png"
             combined_output_path = output_dir / f"{frame_path.stem}_combined.png"
 
-            mask_image = mask.astype(np.uint8) * 255
+            mask_image = create_visualization(
+                processed,
+                mask,
+                prompts=None,
+                save_combined=False,
+                show_prompts=False,
+            )
             save_image(mask_output_path, mask_image)
             outputs.append(mask_output_path)
 
             if config.save_combined:
-                prompts = self._prompt_visualization_payload(
-                    points=prompt_points if frame_index == 0 else None,
-                    box=prompt_box if frame_index == 0 else None,
-                    mask=mask,
-                    tracking_method=config.tracking_method,
-                    show_prompts=config.show_prompts,
-                )
+                current_prompt_overlay = {}
+                if frame_index == 0:
+                    current_prompt_overlay = build_prompt_overlay(
+                        points=prompt_points,
+                        box=prompt_box,
+                    )
+                elif result.used_fallback_prompt:
+                    point = None
+                    box = None
+                    if config.tracking_method == "centroid":
+                        point = get_centroid(mask)
+                    elif config.tracking_method == "pole":
+                        point = get_pole_of_inaccessibility(mask)
+                    elif config.tracking_method == "box":
+                        box = get_box_from_mask(mask)
+                    current_prompt_overlay = build_prompt_overlay(
+                        points=(point,) if point is not None else None,
+                        box=box,
+                    )
 
                 combined = create_visualization(
                     processed,
                     mask,
-                    prompts=prompts,
+                    prompts=current_prompt_overlay if config.show_prompts else None,
                     save_combined=True,
+                    show_prompts=config.show_prompts,
                 )
                 save_image(combined_output_path, combined)
                 outputs.append(combined_output_path)
@@ -222,38 +242,3 @@ class ImageFrameLogitsWorkflow(BaseWorkflow):
 
         return record
 
-    def _prompt_visualization_payload(
-        self,
-        *,
-        points: tuple[tuple[int, int], ...] | None,
-        box: tuple[int, int, int, int] | None,
-        mask: np.ndarray,
-        tracking_method: str,
-        show_prompts: bool,
-    ) -> dict[str, np.ndarray] | None:
-        if not show_prompts:
-            return None
-
-        prompts: dict[str, np.ndarray] = {}
-
-        if points:
-            prompts["points"] = np.asarray(points, dtype=np.float32)
-
-        if box is not None:
-            prompts["box"] = np.asarray(box, dtype=np.float32)
-
-        if not prompts:
-            if tracking_method == "centroid":
-                point = get_centroid(mask)
-                if point is not None:
-                    prompts["points"] = np.asarray([point], dtype=np.float32)
-            elif tracking_method == "pole":
-                point = get_pole_of_inaccessibility(mask)
-                if point is not None:
-                    prompts["points"] = np.asarray([point], dtype=np.float32)
-            elif tracking_method == "box":
-                derived_box = get_box_from_mask(mask)
-                if derived_box is not None:
-                    prompts["box"] = derived_box.astype(np.float32)
-
-        return prompts or None

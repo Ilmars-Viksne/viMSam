@@ -56,6 +56,46 @@ def _normalize_mask(mask: np.ndarray) -> np.ndarray:
     return mask
 
 
+def _draw_prompts_on_image(image: np.ndarray, prompts: dict[str, np.ndarray] | None) -> np.ndarray:
+    if not prompts:
+        return image
+
+    image_disp = np.array(image, copy=True)
+    points = prompts.get("points")
+    if points is not None:
+        points_arr = np.asarray(points)
+        if points_arr.ndim == 1:
+            points_arr = points_arr.reshape(1, 2)
+        for x, y in points_arr:
+            x = int(round(float(x)))
+            y = int(round(float(y)))
+            for dx in range(-4, 5):
+                xx = x + dx
+                if 0 <= xx < image_disp.shape[1] and 0 <= y < image_disp.shape[0]:
+                    image_disp[y, xx] = (255, 255, 255)
+            for dy in range(-4, 5):
+                yy = y + dy
+                if 0 <= yy < image_disp.shape[0] and 0 <= x < image_disp.shape[1]:
+                    image_disp[yy, x] = (255, 255, 255)
+
+    box = prompts.get("box")
+    if box is not None:
+        box_arr = np.asarray(box).reshape(4)
+        x1, y1, x2, y2 = [int(round(float(v))) for v in box_arr]
+        x1, x2 = sorted((x1, x2))
+        y1, y2 = sorted((y1, y2))
+        x1 = max(0, min(x1, image_disp.shape[1] - 1))
+        x2 = max(0, min(x2, image_disp.shape[1] - 1))
+        y1 = max(0, min(y1, image_disp.shape[0] - 1))
+        y2 = max(0, min(y2, image_disp.shape[0] - 1))
+        image_disp[y1:y2 + 1, x1] = (255, 255, 255)
+        image_disp[y1:y2 + 1, x2] = (255, 255, 255)
+        image_disp[y1, x1:x2 + 1] = (255, 255, 255)
+        image_disp[y2, x1:x2 + 1] = (255, 255, 255)
+
+    return image_disp
+
+
 def create_visualization(
     image: np.ndarray,
     segmentation_result: object,
@@ -81,53 +121,11 @@ def create_visualization(
     if not save_combined:
         return np.ascontiguousarray(colored_mask)
 
-    # deterministic overlay blending
     overlay = (image_disp.astype(np.float32) * 0.65 + colored_mask.astype(np.float32) * 0.35)
     overlay = np.clip(overlay, 0, 255).astype(np.uint8)
 
-    # draw prompts only when requested
-    if show_prompts and prompts:
-        prompt_type = prompts.get("type")
-        prompt_data = prompts.get("data")
-
-        def _draw_cross(img: np.ndarray, x: int, y: int, color=(255, 255, 255), size: int = 5):
-            x = int(round(x))
-            y = int(round(y))
-            h_, w_ = img.shape[:2]
-            for dx in range(-size, size + 1):
-                xx = x + dx
-                if 0 <= xx < w_ and 0 <= y < h_:
-                    img[y, xx] = color
-            for dy in range(-size, size + 1):
-                yy = y + dy
-                if 0 <= yy < h_ and 0 <= x < w_:
-                    img[yy, x] = color
-
-        def _draw_box(img: np.ndarray, x1: int, y1: int, x2: int, y2: int, color=(255, 255, 255), thickness: int = 2):
-            x1, y1, x2, y2 = int(round(x1)), int(round(y1)), int(round(x2)), int(round(y2))
-            h_, w_ = img.shape[:2]
-            x1, x2 = max(0, min(x1, w_ - 1)), max(0, min(x2, w_ - 1))
-            y1, y2 = max(0, min(y1, h_ - 1)), max(0, min(y2, h_ - 1))
-            for t in range(thickness):
-                # top/bottom
-                if y1 + t <= y2 - t:
-                    img[y1 + t, x1:x2 + 1] = color
-                    img[y2 - t, x1:x2 + 1] = color
-                # left/right
-                if x1 + t <= x2 - t:
-                    img[y1:y2 + 1, x1 + t] = color
-                    img[y1:y2 + 1, x2 - t] = color
-
-        if prompt_type == "point" and prompt_data is not None:
-            pts = np.asarray(prompt_data)
-            if pts.ndim == 1:
-                pts = pts[None, :]
-            for p in pts:
-                _draw_cross(overlay, p[0], p[1])
-        elif prompt_type == "box" and prompt_data is not None:
-            b = np.asarray(prompt_data)
-            if b.size >= 4:
-                _draw_box(overlay, b[0], b[1], b[2], b[3])
+    if show_prompts:
+        overlay = _draw_prompts_on_image(overlay, prompts)
 
     # side-by-side: original | mask | overlay
     combined = np.concatenate([image_disp, colored_mask, overlay], axis=1)
