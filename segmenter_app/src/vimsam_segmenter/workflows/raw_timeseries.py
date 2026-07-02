@@ -119,16 +119,8 @@ class RawTimeSeriesWorkflow(BaseWorkflow):
 
                 frame_count += 1
 
-        if config.save_combined:
-            mask_path, combined_path = write_video_streams(
-                output_dir / "result_video.mp4",
-                output_dir / "result_video_combined.mp4",
-                frame_generator(),
-                5,
-            )
-            outputs.extend([mask_path, combined_path])
-        else:
-            outputs.append(save_video(output_dir / "result_video.mp4", frame_generator(), 5))
+        for _ in frame_generator():
+            pass
 
         if config.save_combined_video:
             outputs.append(save_combined_video(output_dir, combined_video_frames, fps=config.fps))
