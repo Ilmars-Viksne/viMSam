@@ -7,6 +7,7 @@ from tqdm import tqdm
 
 from ..core.config import SegmentationResult, WorkflowConfig
 from ..io.local import list_files, load_image, output_dir_for, save_image, save_records
+from ..io.video_outputs import save_combined_video
 from ..processing.preprocess import PreProcessor
 from ..tracking.logit_propagation import LogitPropagationTracker
 from ..utils.geometry import get_box_from_mask, get_centroid, get_pole_of_inaccessibility
@@ -44,6 +45,8 @@ class ImageFrameLogitsWorkflow(BaseWorkflow):
 
         records: list[dict[str, object]] = []
         outputs: list[Path] = []
+        combined_video_frames: list[np.ndarray] = []
+        need_combined_frame = config.save_combined or config.save_combined_video
 
         prompt_points = None
         prompt_box = None
@@ -92,7 +95,7 @@ class ImageFrameLogitsWorkflow(BaseWorkflow):
             save_image(mask_output_path, mask_image)
             outputs.append(mask_output_path)
 
-            if config.save_combined:
+            if need_combined_frame:
                 current_prompt_overlay = {}
                 if frame_index == 0:
                     current_prompt_overlay = build_prompt_overlay(
@@ -120,8 +123,11 @@ class ImageFrameLogitsWorkflow(BaseWorkflow):
                     save_combined=True,
                     show_prompts=config.show_prompts,
                 )
-                save_image(combined_output_path, combined)
-                outputs.append(combined_output_path)
+                if config.save_combined:
+                    save_image(combined_output_path, combined)
+                    outputs.append(combined_output_path)
+                if config.save_combined_video:
+                    combined_video_frames.append(combined)
 
             records.append(
                 self._record_frame(
@@ -144,6 +150,9 @@ class ImageFrameLogitsWorkflow(BaseWorkflow):
 
         if stats_path is not None:
             outputs.append(stats_path)
+
+        if config.save_combined_video:
+            outputs.append(save_combined_video(output_dir, combined_video_frames, fps=config.fps))
 
         return SegmentationResult(
             success=True,

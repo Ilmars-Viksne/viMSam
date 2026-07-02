@@ -78,6 +78,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tracking_method", "--tracking-method", dest="tracking_method", choices=["box", "centroid", "pole"], default="box")
     parser.add_argument("--show_prompts", "--show-prompts", dest="show_prompts", action="store_true", help="Draw prompts on combined output")
     parser.add_argument("--save_combined", "--save-combined", dest="save_combined", action="store_true", help="Save combined original/mask/overlay output")
+    parser.add_argument(
+        "--save-combined-video",
+        dest="save_combined_video",
+        action="store_true",
+        help=(
+            "Create an MP4 video from combined visualization frames. "
+            "Disabled by default."
+        ),
+    )
     parser.add_argument("--format", choices=["csv", "json"], default="csv")
     parser.add_argument("--preprocessing-method", choices=["fixed_16bit", "minmax", "percentile", "none"], default="fixed_16bit")
     parser.add_argument("--model", "--model-type", dest="model_type", default="vit_b")
@@ -108,6 +117,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             ),
             show_prompts=args.show_prompts,
             save_combined=args.save_combined,
+            save_combined_video=args.save_combined_video,
             tracking_method=args.tracking_method,
             export_format=args.format,
             preprocessing_method=args.preprocessing_method,

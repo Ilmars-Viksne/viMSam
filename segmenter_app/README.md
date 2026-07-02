@@ -20,6 +20,8 @@ Legacy and modern flags are both supported, including `--show_prompts`/`--show-p
 ```bash
 python main.py --input data/input/images/20260226213602.raw --out data/output/images/res.png --workflow raw_single --points "500,480" --show_prompts --save_combined
 vimsam-segmenter --input data/input/videos/ --out data/output/videos/ --workflow raw_timeseries --points "500,480" --tracking-method pole --show-prompts --save-combined
+vimsam-segmenter --input data/input/videos/ --out data/output/videos_logits/ --workflow raw_timeseries_logits --points "500,480" --tracking-method pole --show-prompts --save-combined-video
+vimsam-segmenter --input data/input/videos/ --out data/output/videos_logits/ --workflow raw_timeseries_logits --points "500,480" --tracking-method pole --show-prompts --save-combined --save-combined-video
 vimsam-segmenter --input data/input/images/example.tif --out data/output/images/res.png --workflow single --points "150,100 200,400" --format csv
 vimsam-segmenter --input data/input/videos/moving_cell.mp4 --out data/output/videos/video_box --workflow video --points "150,100" --tracking_method box --format json
 ```

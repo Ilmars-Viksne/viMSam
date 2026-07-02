@@ -161,6 +161,16 @@ def test_workflow_config_accepts_logits_workflows_and_fps(tmp_path):
     assert config.fps == 10.5
 
 
+def test_workflow_config_does_not_save_combined_video_by_default(tmp_path):
+    config = WorkflowConfig(
+        workflow="raw_timeseries_logits",
+        input_path=tmp_path / "input",
+        output_path=tmp_path / "output",
+    )
+
+    assert config.save_combined_video is False
+
+
 def test_main_passes_fps_to_workflow_config(monkeypatch, capsys, tmp_path):
     output_path = tmp_path / "result.png"
 
@@ -181,6 +191,32 @@ def test_main_passes_fps_to_workflow_config(monkeypatch, capsys, tmp_path):
         "raw_timeseries_logits",
         "--fps",
         "12.5",
+    ])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert str(output_path) in captured.out
+
+
+def test_cli_passes_save_combined_video(monkeypatch, capsys, tmp_path):
+    output_path = tmp_path / "result.png"
+
+    class DummyApp:
+        def run(self, config):
+            assert config.workflow == "raw_timeseries_logits"
+            assert config.save_combined_video is True
+            return SegmentationResult(success=True, outputs=(output_path,))
+
+    monkeypatch.setattr("vimsam_segmenter.core.app.SegmenterApp", DummyApp)
+
+    exit_code = main([
+        "--input",
+        "input.raw",
+        "--out",
+        str(output_path),
+        "--workflow",
+        "raw_timeseries_logits",
+        "--save-combined-video",
     ])
 
     captured = capsys.readouterr()

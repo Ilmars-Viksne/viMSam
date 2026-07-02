@@ -8,6 +8,7 @@ from tqdm import tqdm
 from ..core.config import SegmentationResult, WorkflowConfig
 from ..io.local import output_dir_for, save_image, save_records
 from ..io.raw import get_raw_timeseries_files, read_u3cmos_raw, validate_raw_timeseries_files
+from ..io.video_outputs import save_combined_video
 from ..processing.preprocess import PreProcessor
 from ..tracking.logit_propagation import LogitPropagationTracker
 from ..utils.geometry import get_box_from_mask, get_centroid, get_pole_of_inaccessibility
@@ -45,6 +46,7 @@ class RawTimeSeriesLogitsWorkflow(BaseWorkflow):
 
         records: list[dict[str, object]] = []
         outputs: list[Path] = []
+        combined_video_frames: list[np.ndarray] = []
 
         prompt_points = None
         prompt_box = None
@@ -52,6 +54,8 @@ class RawTimeSeriesLogitsWorkflow(BaseWorkflow):
         if config.prompts is not None:
             prompt_points = config.prompts.points
             prompt_box = config.prompts.box
+
+        need_combined_frame = config.save_combined or config.save_combined_video
 
         if not prompt_points and prompt_box is None:
             return SegmentationResult(
@@ -97,7 +101,7 @@ class RawTimeSeriesLogitsWorkflow(BaseWorkflow):
             save_image(mask_output_path, mask_image)
             outputs.append(mask_output_path)
 
-            if config.save_combined:
+            if need_combined_frame:
                 current_prompt_overlay = {}
                 if frame_index == 0:
                     current_prompt_overlay = build_prompt_overlay(
@@ -125,8 +129,11 @@ class RawTimeSeriesLogitsWorkflow(BaseWorkflow):
                     save_combined=True,
                     show_prompts=config.show_prompts,
                 )
-                save_image(combined_output_path, combined)
-                outputs.append(combined_output_path)
+                if config.save_combined:
+                    save_image(combined_output_path, combined)
+                    outputs.append(combined_output_path)
+                if config.save_combined_video:
+                    combined_video_frames.append(combined)
 
             record = self._record_frame(
                 frame_index=frame_index,
@@ -154,6 +161,14 @@ class RawTimeSeriesLogitsWorkflow(BaseWorkflow):
 
         if stats_path is not None:
             outputs.append(stats_path)
+
+        if config.save_combined_video:
+            video_path = save_combined_video(
+                output_dir,
+                combined_video_frames,
+                fps=config.fps,
+            )
+            outputs.append(video_path)
 
         return SegmentationResult(
             success=True,

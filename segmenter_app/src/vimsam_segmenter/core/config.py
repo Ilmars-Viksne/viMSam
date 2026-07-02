@@ -72,6 +72,7 @@ class WorkflowConfig:
     prompts: PromptConfig | None = None
     show_prompts: bool = False
     save_combined: bool = False
+    save_combined_video: bool = False
     tracking_method: str = "box"
     export_format: str = "csv"
     preprocessing_method: str = "fixed_16bit"

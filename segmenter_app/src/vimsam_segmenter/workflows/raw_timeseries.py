@@ -4,8 +4,9 @@ import numpy as np
 from tqdm import tqdm
 
 from ..core.config import SegmentationResult, WorkflowConfig
-from ..io.local import output_dir_for, save_image, save_records, save_video, write_video_streams
+from ..io.local import output_dir_for, save_image, save_records, save_video
 from ..io.raw import get_raw_timeseries_files, read_u3cmos_raw, validate_raw_timeseries_files
+from ..io.video_outputs import save_combined_video
 from ..processing.preprocess import PreProcessor
 from ..utils.geometry import get_box_from_mask, get_centroid, get_pole_of_inaccessibility
 from ..utils.logging import setup_logger
@@ -35,6 +36,8 @@ class RawTimeSeriesWorkflow(BaseWorkflow):
         points = np.array(config.prompts.points) if is_tracking else None
         outputs = []
         frame_count = 0
+        combined_video_frames: list[np.ndarray] = []
+        need_combined_frame = config.save_combined or config.save_combined_video
 
         logger.info("Starting raw time-series processing. Found %s frames. Tracking: %s", len(files), is_tracking)
 
@@ -95,7 +98,7 @@ class RawTimeSeriesWorkflow(BaseWorkflow):
                 )
                 outputs.append(save_image(output_dir / f"frame_{i:05d}.png", mask_viz))
 
-                if config.save_combined:
+                if need_combined_frame:
                     combined_viz = create_visualization(
                         processed_frame,
                         result,
@@ -103,8 +106,14 @@ class RawTimeSeriesWorkflow(BaseWorkflow):
                         save_combined=True,
                         show_prompts=config.show_prompts,
                     )
-                    outputs.append(save_image(output_dir / f"frame_{i:05d}_combined.png", combined_viz))
-                    yield mask_viz, combined_viz
+                    if config.save_combined:
+                        outputs.append(save_image(output_dir / f"frame_{i:05d}_combined.png", combined_viz))
+                    if config.save_combined_video:
+                        combined_video_frames.append(combined_viz)
+                    if config.save_combined:
+                        yield mask_viz, combined_viz
+                    else:
+                        yield mask_viz
                 else:
                     yield mask_viz
 
@@ -120,6 +129,9 @@ class RawTimeSeriesWorkflow(BaseWorkflow):
             outputs.extend([mask_path, combined_path])
         else:
             outputs.append(save_video(output_dir / "result_video.mp4", frame_generator(), 5))
+
+        if config.save_combined_video:
+            outputs.append(save_combined_video(output_dir, combined_video_frames, fps=config.fps))
 
         stats_path = save_records(output_dir / "tracking_stats", stats.get_data(), config.export_format) if is_tracking else None
         return SegmentationResult(True, frame_count, outputs=tuple(outputs), stats_path=stats_path)
