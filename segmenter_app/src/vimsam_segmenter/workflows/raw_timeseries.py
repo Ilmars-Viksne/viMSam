@@ -4,7 +4,7 @@ import numpy as np
 from tqdm import tqdm
 
 from ..core.config import SegmentationResult, WorkflowConfig
-from ..io.local import output_dir_for, save_image, save_records, save_video
+from ..io.local import output_dir_for, save_image, save_records, save_video, write_video_streams
 from ..io.raw import get_raw_timeseries_files, read_u3cmos_raw, validate_raw_timeseries_files
 from ..io.video_outputs import save_combined_video
 from ..processing.preprocess import PreProcessor
