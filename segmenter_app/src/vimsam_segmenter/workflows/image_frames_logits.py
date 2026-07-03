@@ -18,6 +18,8 @@ from ..tracking.logit_propagation import LogitPropagationTracker
 from ..utils.geometry import get_box_from_mask, get_centroid, get_pole_of_inaccessibility
 from ..utils.logging import setup_logger
 from ..utils.prompts import build_prompt_overlay
+from ..utils.standard_stats import build_standard_stats_record
+from ..utils.time_resolver import resolve_time_seconds
 from ..utils.visualization import create_visualization
 
 from .base import BaseWorkflow
@@ -71,6 +73,12 @@ class ImageFrameLogitsWorkflow(BaseWorkflow):
             )
 
         ensure_series_output_dirs(output_dir, save_combined=config.save_combined)
+        times = resolve_time_seconds(
+            source_paths=frame_files,
+            fps=config.fps,
+            timestamp_format=config.timestamp_format,
+            user_time_seconds=config.time_seconds,
+        )
 
         for frame_index, frame_path in enumerate(tqdm(frame_files, desc="Logit propagation")):
             image = load_image(frame_path)
@@ -137,17 +145,14 @@ class ImageFrameLogitsWorkflow(BaseWorkflow):
                     combined_video_frames.append(combined)
 
             records.append(
-                self._record_frame(
-                    frame_index=frame_index,
-                    frame_path=frame_path,
+                build_standard_stats_record(
+                    source_path=frame_path,
+                    time_seconds=times[frame_index],
+                    frame_id=frame_index,
                     mask=mask,
-                    score=result.score,
-                    used_mask_input=result.used_mask_input,
-                    used_fallback_prompt=result.used_fallback_prompt,
-                    tracking_method=config.tracking_method,
-                    fps=config.fps,
-                    output_dir=output_dir,
-                    save_combined=config.save_combined,
+                    mask_label=1,
+                    iou_score=result.score,
+                    has_combined=config.save_combined,
                 )
             )
 
@@ -196,77 +201,4 @@ class ImageFrameLogitsWorkflow(BaseWorkflow):
 
         raise ValueError(f"Unsupported image shape for SAM input: {arr.shape}")
 
-    def _record_frame(
-        self,
-        *,
-        frame_index: int,
-        frame_path: Path,
-        mask: np.ndarray,
-        score: float | None,
-        used_mask_input: bool,
-        used_fallback_prompt: bool,
-        tracking_method: str,
-        fps: float | None,
-        output_dir: Path,
-        save_combined: bool,
-    ) -> dict[str, object]:
-        centroid = get_centroid(mask)
-        pole = get_pole_of_inaccessibility(mask)
-        box = get_box_from_mask(mask, padding=0)
-
-        area_px = int(np.sum(mask))
-        time_seconds = None
-        if fps is not None and fps > 0:
-            time_seconds = frame_index / fps
-
-        record: dict[str, object] = {
-            "frame_index": frame_index,
-            "frame_id": frame_index,
-            "time_seconds": time_seconds,
-            "source": str(frame_path),
-            "source_name": frame_path.name,
-            "mask_path": mask_frame_path(output_dir, frame_index).relative_to(output_dir).as_posix(),
-            "combined_path": (
-                combined_frame_path(output_dir, frame_index).relative_to(output_dir).as_posix()
-                if save_combined
-                else ""
-            ),
-            "area_px": area_px,
-            "sam_score": score,
-            "used_mask_input": used_mask_input,
-            "used_fallback_prompt": used_fallback_prompt,
-            "tracking_method": tracking_method,
-        }
-
-        if centroid is not None:
-            record["centroid_x"] = centroid[0]
-            record["centroid_y"] = centroid[1]
-        else:
-            record["centroid_x"] = None
-            record["centroid_y"] = None
-
-        if pole is not None:
-            record["pole_x"] = pole[0]
-            record["pole_y"] = pole[1]
-        else:
-            record["pole_x"] = None
-            record["pole_y"] = None
-
-        if box is not None:
-            x1, y1, x2, y2 = [int(v) for v in box]
-            record["bbox_x1"] = x1
-            record["bbox_y1"] = y1
-            record["bbox_x2"] = x2
-            record["bbox_y2"] = y2
-            record["bbox_width"] = x2 - x1
-            record["bbox_height"] = y2 - y1
-        else:
-            record["bbox_x1"] = None
-            record["bbox_y1"] = None
-            record["bbox_x2"] = None
-            record["bbox_y2"] = None
-            record["bbox_width"] = None
-            record["bbox_height"] = None
-
-        return record
 

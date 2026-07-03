@@ -16,7 +16,8 @@ from ..processing.preprocess import PreProcessor
 from ..utils.geometry import get_box_from_mask, get_centroid, get_pole_of_inaccessibility
 from ..utils.logging import setup_logger
 from ..utils.prompts import build_prompt_overlay
-from ..utils.stats import StatsCollector
+from ..utils.standard_stats import build_standard_stats_record
+from ..utils.time_resolver import resolve_time_seconds
 from ..utils.visualization import create_visualization
 
 from .base import BaseWorkflow, automatic_mask_generator
@@ -34,7 +35,13 @@ class RawTimeSeriesWorkflow(BaseWorkflow):
         output_dir = output_dir_for(config.output_path)
         predictor = self.model_service.get_predictor()
         pre = PreProcessor(method=config.preprocessing_method)
-        stats = StatsCollector()
+        times = resolve_time_seconds(
+            source_paths=files,
+            fps=config.fps,
+            timestamp_format=config.timestamp_format,
+            user_time_seconds=config.time_seconds,
+        )
+        records: list[dict[str, object]] = []
         current_logits = None
         current_mask = None
         is_tracking = bool(config.prompts and config.prompts.points)
@@ -88,20 +95,16 @@ class RawTimeSeriesWorkflow(BaseWorkflow):
                         iou = float(ious[0])
                     else:
                         current_mask = np.zeros(processed_frame.shape[:2], dtype=bool)
-                    stats.collect(
-                        current_mask,
-                        iou,
-                        i,
-                        1,
-                        meta={
-                            "source_name": filepath.name,
-                            "mask_path": mask_frame_path(output_dir, i).relative_to(output_dir).as_posix(),
-                            "combined_path": (
-                                combined_frame_path(output_dir, i).relative_to(output_dir).as_posix()
-                                if config.save_combined
-                                else ""
-                            ),
-                        },
+                    records.append(
+                        build_standard_stats_record(
+                            source_path=filepath,
+                            time_seconds=times[i],
+                            frame_id=i,
+                            mask=current_mask,
+                            mask_label=1,
+                            iou_score=iou,
+                            has_combined=config.save_combined,
+                        )
                     )
                     result = current_mask
                 else:
@@ -145,7 +148,7 @@ class RawTimeSeriesWorkflow(BaseWorkflow):
         if config.save_combined_video:
             outputs.append(save_combined_video(output_dir, combined_video_frames, fps=config.fps))
 
-        stats_path = save_records(output_dir / "stats", stats.get_data(), config.export_format) if is_tracking else None
+        stats_path = save_records(output_dir / "stats", records, config.export_format) if records else None
         return SegmentationResult(True, frame_count, outputs=tuple(outputs), stats_path=stats_path)
 
     @staticmethod

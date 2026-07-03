@@ -79,6 +79,8 @@ class WorkflowConfig:
     raw_width: int = 1024
     raw_height: int = 1024
     fps: float | None = None
+    timestamp_format: str | None = "%Y%m%d%H%M%S"
+    time_seconds: tuple[float, ...] | None = None
 
 
     def __post_init__(self) -> None:
@@ -109,11 +111,23 @@ class WorkflowConfig:
         if self.raw_width <= 0 or self.raw_height <= 0:
             raise InputValidationError("raw_width and raw_height must be positive")
 
+        if self.fps is not None and self.fps <= 0:
+            raise InputValidationError("fps must be positive")
+
         self.input_path = normalize_path(self.input_path)
         self.output_path = normalize_path(self.output_path)
 
         if self.prompts is None:
             self.prompts = PromptConfig()
+
+        if self.timestamp_format == "":
+            self.timestamp_format = None
+
+        if self.time_seconds is not None:
+            try:
+                self.time_seconds = tuple(float(value) for value in self.time_seconds)
+            except (TypeError, ValueError) as exc:
+                raise InputValidationError("time_seconds must contain numeric values") from exc
 
 
     @property

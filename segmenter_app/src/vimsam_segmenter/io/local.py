@@ -7,6 +7,7 @@ from typing import Any, Generator, Iterable
 
 from ..core.config import normalize_path
 from ..core.errors import DependencyMissingError, InputValidationError, OutputWriteError
+from ..utils.stats_schema import STANDARD_STATS_COLUMNS, ordered_stats_records
 
 
 def _imageio():
@@ -227,9 +228,16 @@ def save_records(path: Path, records: list[dict[str, Any]], export_format: str) 
                     import pandas as pd
                 except ImportError as exc:
                     raise DependencyMissingError("pandas is required to write CSV stats.") from exc
-                pd.DataFrame(records).to_csv(handle, index=False)
+                df = pd.DataFrame(records)
+                for column in STANDARD_STATS_COLUMNS:
+                    if column not in df.columns:
+                        df[column] = ""
+                ordered_columns = STANDARD_STATS_COLUMNS + [
+                    column for column in df.columns if column not in STANDARD_STATS_COLUMNS
+                ]
+                df[ordered_columns].to_csv(handle, index=False)
             else:
-                json.dump(records, handle, indent=4)
+                json.dump(ordered_stats_records(records), handle, indent=4)
                 handle.write("\n")
         temp_path.replace(path)
     except DependencyMissingError:

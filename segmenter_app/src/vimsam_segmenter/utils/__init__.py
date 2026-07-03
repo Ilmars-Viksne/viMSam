@@ -1,5 +1,4 @@
 from .logging import setup_logger
-from .prompts import build_prompt_overlay
 
 __all__ = [
     "setup_logger",
@@ -22,6 +21,10 @@ def __getattr__(name: str):
         from .stats import StatsCollector
 
         return StatsCollector
+    if name == "build_prompt_overlay":
+        from .prompts import build_prompt_overlay
+
+        return build_prompt_overlay
     if name in {"create_visualization", "save_masks_as_image"}:
         from . import visualization
 

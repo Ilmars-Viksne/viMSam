@@ -8,7 +8,7 @@ from ..io.raw import read_u3cmos_raw
 from ..processing.preprocess import PreProcessor
 from ..utils.logging import setup_logger
 from ..utils.prompts import build_prompt_overlay
-from ..utils.stats import StatsCollector
+from ..utils.standard_stats import build_standard_stats_record
 from ..utils.visualization import create_visualization
 
 from .base import BaseWorkflow, automatic_mask_generator
@@ -24,7 +24,7 @@ class RawSingleImageWorkflow(BaseWorkflow):
         predictor = self.model_service.get_predictor()
         predictor.set_image(self.sam_image(processed))
 
-        stats = StatsCollector()
+        records: list[dict[str, object]] = []
         stats_path = None
         current_prompt_overlay = build_prompt_overlay(
             points=config.prompts.points if config.prompts else None,
@@ -41,7 +41,17 @@ class RawSingleImageWorkflow(BaseWorkflow):
                     multimask_output=False,
                 )
                 mask = masks[0]
-                stats.collect(mask, float(ious[0]), 0, i + 1)
+                records.append(
+                    build_standard_stats_record(
+                        source_path=config.input_path,
+                        time_seconds=0.0,
+                        frame_id=0,
+                        mask=mask,
+                        mask_label=i + 1,
+                        iou_score=float(ious[0]),
+                        has_combined=config.save_combined,
+                    )
+                )
                 masks_list.append(mask)
             result = np.array(masks_list)
         else:
@@ -78,7 +88,7 @@ class RawSingleImageWorkflow(BaseWorkflow):
                 )
             )
 
-        if stats.get_data():
-            stats_path = save_records(out_path.parent / "image_stats", stats.get_data(), config.export_format)
+        if records:
+            stats_path = save_records(out_path.parent / "image_stats", records, config.export_format)
 
         return SegmentationResult(True, 1, outputs=tuple(outputs), stats_path=stats_path)

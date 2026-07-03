@@ -4,6 +4,7 @@ import numpy as np
 from tqdm import tqdm
 
 from ..core.config import SegmentationResult, WorkflowConfig
+from ..core.errors import InputValidationError
 from ..io.local import (
     output_dir_for,
     read_metadata,
@@ -21,7 +22,7 @@ from ..processing.preprocess import PreProcessor
 from ..utils.geometry import get_box_from_mask, get_centroid, get_pole_of_inaccessibility
 from ..utils.logging import setup_logger
 from ..utils.prompts import build_prompt_overlay
-from ..utils.stats import StatsCollector
+from ..utils.standard_stats import build_standard_stats_record
 from ..utils.visualization import create_visualization
 
 from .base import BaseWorkflow, automatic_mask_generator
@@ -33,9 +34,10 @@ class VideoFileWorkflow(BaseWorkflow):
     def run(self, config: WorkflowConfig) -> SegmentationResult:
         output_dir = output_dir_for(config.output_path)
         fps = read_metadata(config.input_path).get("fps", 5)
+        video_fps = config.fps or float(fps or 5)
         predictor = self.model_service.get_predictor()
         pre = PreProcessor(method=config.preprocessing_method)
-        stats = StatsCollector()
+        records: list[dict[str, object]] = []
 
         current_logits = None
         current_mask = None
@@ -89,20 +91,24 @@ class VideoFileWorkflow(BaseWorkflow):
                         iou = float(ious[0])
                     else:
                         current_mask = np.zeros(processed_frame.shape[:2], dtype=bool)
-                    stats.collect(
-                        current_mask,
-                        iou,
-                        i,
-                        1,
-                        meta={
-                            "source_name": config.input_path.name,
-                            "mask_path": mask_frame_path(output_dir, i).relative_to(output_dir).as_posix(),
-                            "combined_path": (
-                                combined_frame_path(output_dir, i).relative_to(output_dir).as_posix()
-                                if config.save_combined
-                                else ""
-                            ),
-                        },
+                    if config.time_seconds is not None:
+                        if i >= len(config.time_seconds):
+                            raise InputValidationError(
+                                f"Expected at least {i + 1} time values, got {len(config.time_seconds)}."
+                            )
+                        time_seconds = config.time_seconds[i]
+                    else:
+                        time_seconds = i / video_fps
+                    records.append(
+                        build_standard_stats_record(
+                            source_path=config.input_path,
+                            time_seconds=time_seconds,
+                            frame_id=i,
+                            mask=current_mask,
+                            mask_label=1,
+                            iou_score=iou,
+                            has_combined=config.save_combined,
+                        )
                     )
                     result = current_mask
                 else:
@@ -143,10 +149,13 @@ class VideoFileWorkflow(BaseWorkflow):
         for _ in frame_generator():
             pass
 
+        if config.time_seconds is not None and len(config.time_seconds) != frame_count:
+            raise InputValidationError(f"Expected {frame_count} time values, got {len(config.time_seconds)}.")
+
         if config.save_combined_video:
             outputs.append(save_combined_video(output_dir, combined_video_frames, fps=config.fps))
 
-        stats_path = save_records(output_dir / "stats", stats.get_data(), config.export_format) if is_tracking else None
+        stats_path = save_records(output_dir / "stats", records, config.export_format) if records else None
         return SegmentationResult(True, frame_count, outputs=tuple(outputs), stats_path=stats_path)
 
     @staticmethod

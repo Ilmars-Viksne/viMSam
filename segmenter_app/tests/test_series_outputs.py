@@ -5,8 +5,10 @@ import pytest
 from vimsam_segmenter.io.series_outputs import (
     combined_dir,
     combined_frame_path,
+    combined_name,
     combined_video_path,
     frame_stem,
+    mask_name,
     mask_frame_path,
     masks_dir,
 )
@@ -22,6 +24,11 @@ def test_frame_stem_uses_five_digits_by_default():
 def test_frame_stem_rejects_negative_index():
     with pytest.raises(ValueError):
         frame_stem(-1)
+
+
+def test_frame_names():
+    assert mask_name(0) == "frame_00000.png"
+    assert combined_name(0) == "frame_00000_combined.png"
 
 
 def test_series_directories():

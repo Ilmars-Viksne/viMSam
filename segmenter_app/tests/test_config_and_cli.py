@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from vimsam_segmenter.cli import main, parse_box, parse_points
+from vimsam_segmenter.cli import main, parse_box, parse_points, parse_time_seconds
 from vimsam_segmenter.core.config import PromptConfig, SegmentationResult, WorkflowConfig
 from vimsam_segmenter.core.errors import InputValidationError, SegmenterError
 
@@ -55,6 +55,16 @@ def test_parse_box_returns_none_for_empty_input():
 def test_parse_box_rejects_invalid_values(value):
     with pytest.raises(Exception):
         parse_box(value)
+
+
+def test_parse_time_seconds_accepts_comma_separated_values():
+    assert parse_time_seconds("0,23,46") == (0.0, 23.0, 46.0)
+
+
+@pytest.mark.parametrize("value", ["0,,2", "0,x", ",1", "1,"])
+def test_parse_time_seconds_rejects_invalid_values(value):
+    with pytest.raises(Exception):
+        parse_time_seconds(value)
 
 
 def test_workflow_config_normalizes_paths_and_options(tmp_path):
@@ -178,6 +188,8 @@ def test_main_passes_fps_to_workflow_config(monkeypatch, capsys, tmp_path):
         def run(self, config):
             assert config.workflow == "raw_timeseries_logits"
             assert config.fps == 12.5
+            assert config.timestamp_format is None
+            assert config.time_seconds == (0.0, 0.5)
             return SegmentationResult(success=True, outputs=(output_path,))
 
     monkeypatch.setattr("vimsam_segmenter.core.app.SegmenterApp", DummyApp)
@@ -191,6 +203,10 @@ def test_main_passes_fps_to_workflow_config(monkeypatch, capsys, tmp_path):
         "raw_timeseries_logits",
         "--fps",
         "12.5",
+        "--timestamp-format",
+        "",
+        "--time-seconds",
+        "0,0.5",
     ])
 
     captured = capsys.readouterr()

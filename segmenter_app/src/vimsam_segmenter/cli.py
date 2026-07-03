@@ -57,6 +57,24 @@ def parse_box(box_str: str | None) -> tuple[int, int, int, int] | None:
     return x1, y1, x2, y2
 
 
+def parse_time_seconds(value: str | None) -> tuple[float, ...] | None:
+    if value is None or not value.strip():
+        return None
+
+    parts = [part.strip() for part in value.split(",")]
+    if any(not part for part in parts):
+        raise argparse.ArgumentTypeError(
+            "Invalid --time-seconds. Expected comma-separated numbers, for example: 0,23,46."
+        )
+
+    try:
+        return tuple(float(part) for part in parts)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            "Invalid --time-seconds. Expected comma-separated numbers, for example: 0,23,46."
+        ) from exc
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="vimsam-segmenter")
     parser.add_argument("--input", required=True, help="Input file or directory for time-series workflows")
@@ -95,6 +113,20 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--raw-width", type=int, default=1024)
     parser.add_argument("--raw-height", type=int, default=1024)
     parser.add_argument("--fps", type=float, default=None, help="Frame rate used to compute time_seconds. First frame is 0 seconds.")
+    parser.add_argument(
+        "--timestamp-format",
+        default="%Y%m%d%H%M%S",
+        help=(
+            "Timestamp format used to compute time_seconds from source filenames. "
+            "Default: %%Y%%m%%d%%H%%M%%S. Use an empty string to disable filename timestamp parsing."
+        ),
+    )
+    parser.add_argument(
+        "--time-seconds",
+        type=parse_time_seconds,
+        default=None,
+        help="Comma-separated user time list in seconds, for example: 0,23,46.",
+    )
     return parser
 
 
@@ -124,6 +156,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             raw_width=args.raw_width,
             raw_height=args.raw_height,
             fps=args.fps,
+            timestamp_format=args.timestamp_format or None,
+            time_seconds=args.time_seconds,
             model=ModelConfig(
                 model_type=args.model_type,
                 device=args.device,
@@ -149,4 +183,3 @@ def main(argv: Sequence[str] | None = None) -> int:
     except SegmenterError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 2
-

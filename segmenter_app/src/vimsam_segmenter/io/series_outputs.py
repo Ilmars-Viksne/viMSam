@@ -14,6 +14,16 @@ def frame_stem(frame_index: int, digits: int = DEFAULT_FRAME_DIGITS) -> str:
     return f"frame_{frame_index:0{digits}d}"
 
 
+def mask_name(frame_index: int) -> str:
+    """File name for a clean mask frame."""
+    return f"{frame_stem(frame_index)}.png"
+
+
+def combined_name(frame_index: int) -> str:
+    """File name for a combined diagnostic frame."""
+    return f"{frame_stem(frame_index)}_combined.png"
+
+
 def masks_dir(output_dir: Path) -> Path:
     """Directory for clean mask frames."""
     return output_dir / "masks"
@@ -43,12 +53,12 @@ def ensure_series_output_dirs(
 
 def mask_frame_path(output_dir: Path, frame_index: int) -> Path:
     """Path for a clean mask frame."""
-    return masks_dir(output_dir) / f"{frame_stem(frame_index)}.png"
+    return masks_dir(output_dir) / mask_name(frame_index)
 
 
 def combined_frame_path(output_dir: Path, frame_index: int) -> Path:
     """Path for a combined diagnostic frame."""
-    return combined_dir(output_dir) / f"{frame_stem(frame_index)}_combined.png"
+    return combined_dir(output_dir) / combined_name(frame_index)
 
 
 def combined_video_path(output_dir: Path) -> Path:
