@@ -31,4 +31,14 @@ def ordered_stats_record(record: dict[str, Any]) -> dict[str, Any]:
 
 
 def ordered_stats_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [ordered_stats_record(record) for record in records]
+    extra_columns: list[str] = []
+    for record in records:
+        for column in record:
+            if column not in STANDARD_STATS_COLUMNS and column not in extra_columns:
+                extra_columns.append(column)
+
+    ordered_columns = STANDARD_STATS_COLUMNS + extra_columns
+    return [
+        {column: record.get(column, "") for column in ordered_columns}
+        for record in records
+    ]
