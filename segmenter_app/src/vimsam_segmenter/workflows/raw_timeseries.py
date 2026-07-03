@@ -4,8 +4,13 @@ import numpy as np
 from tqdm import tqdm
 
 from ..core.config import SegmentationResult, WorkflowConfig
-from ..io.local import output_dir_for, save_image, save_records, save_video, write_video_streams
+from ..io.local import output_dir_for, save_image, save_records
 from ..io.raw import get_raw_timeseries_files, read_u3cmos_raw, validate_raw_timeseries_files
+from ..io.series_outputs import (
+    combined_frame_path,
+    ensure_series_output_dirs,
+    mask_frame_path,
+)
 from ..io.video_outputs import save_combined_video
 from ..processing.preprocess import PreProcessor
 from ..utils.geometry import get_box_from_mask, get_centroid, get_pole_of_inaccessibility
@@ -38,6 +43,7 @@ class RawTimeSeriesWorkflow(BaseWorkflow):
         frame_count = 0
         combined_video_frames: list[np.ndarray] = []
         need_combined_frame = config.save_combined or config.save_combined_video
+        ensure_series_output_dirs(output_dir, save_combined=config.save_combined)
 
         logger.info("Starting raw time-series processing. Found %s frames. Tracking: %s", len(files), is_tracking)
 
@@ -82,7 +88,21 @@ class RawTimeSeriesWorkflow(BaseWorkflow):
                         iou = float(ious[0])
                     else:
                         current_mask = np.zeros(processed_frame.shape[:2], dtype=bool)
-                    stats.collect(current_mask, iou, i, 1, meta={"filename": filepath.name})
+                    stats.collect(
+                        current_mask,
+                        iou,
+                        i,
+                        1,
+                        meta={
+                            "source_name": filepath.name,
+                            "mask_path": mask_frame_path(output_dir, i).relative_to(output_dir).as_posix(),
+                            "combined_path": (
+                                combined_frame_path(output_dir, i).relative_to(output_dir).as_posix()
+                                if config.save_combined
+                                else ""
+                            ),
+                        },
+                    )
                     result = current_mask
                 else:
                     amg = automatic_mask_generator(predictor)
@@ -96,7 +116,7 @@ class RawTimeSeriesWorkflow(BaseWorkflow):
                     save_combined=False,
                     show_prompts=False,
                 )
-                outputs.append(save_image(output_dir / f"frame_{i:05d}.png", mask_viz))
+                outputs.append(save_image(mask_frame_path(output_dir, i), mask_viz))
 
                 if need_combined_frame:
                     combined_viz = create_visualization(
@@ -107,7 +127,7 @@ class RawTimeSeriesWorkflow(BaseWorkflow):
                         show_prompts=config.show_prompts,
                     )
                     if config.save_combined:
-                        outputs.append(save_image(output_dir / f"frame_{i:05d}_combined.png", combined_viz))
+                        outputs.append(save_image(combined_frame_path(output_dir, i), combined_viz))
                     if config.save_combined_video:
                         combined_video_frames.append(combined_viz)
                     if config.save_combined:
@@ -125,7 +145,7 @@ class RawTimeSeriesWorkflow(BaseWorkflow):
         if config.save_combined_video:
             outputs.append(save_combined_video(output_dir, combined_video_frames, fps=config.fps))
 
-        stats_path = save_records(output_dir / "tracking_stats", stats.get_data(), config.export_format) if is_tracking else None
+        stats_path = save_records(output_dir / "stats", stats.get_data(), config.export_format) if is_tracking else None
         return SegmentationResult(True, frame_count, outputs=tuple(outputs), stats_path=stats_path)
 
     @staticmethod

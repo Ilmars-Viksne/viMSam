@@ -7,6 +7,11 @@ from tqdm import tqdm
 
 from ..core.config import SegmentationResult, WorkflowConfig
 from ..io.local import list_files, load_image, output_dir_for, save_image, save_records
+from ..io.series_outputs import (
+    combined_frame_path,
+    ensure_series_output_dirs,
+    mask_frame_path,
+)
 from ..io.video_outputs import save_combined_video
 from ..processing.preprocess import PreProcessor
 from ..tracking.logit_propagation import LogitPropagationTracker
@@ -65,6 +70,8 @@ class ImageFrameLogitsWorkflow(BaseWorkflow):
                 ),
             )
 
+        ensure_series_output_dirs(output_dir, save_combined=config.save_combined)
+
         for frame_index, frame_path in enumerate(tqdm(frame_files, desc="Logit propagation")):
             image = load_image(frame_path)
             processed = preprocessor.run(image)
@@ -82,8 +89,8 @@ class ImageFrameLogitsWorkflow(BaseWorkflow):
 
             mask = result.mask
 
-            mask_output_path = output_dir / f"{frame_path.stem}_mask.png"
-            combined_output_path = output_dir / f"{frame_path.stem}_combined.png"
+            mask_output_path = mask_frame_path(output_dir, frame_index)
+            combined_output_path = combined_frame_path(output_dir, frame_index)
 
             mask_image = create_visualization(
                 processed,
@@ -139,11 +146,13 @@ class ImageFrameLogitsWorkflow(BaseWorkflow):
                     used_fallback_prompt=result.used_fallback_prompt,
                     tracking_method=config.tracking_method,
                     fps=config.fps,
+                    output_dir=output_dir,
+                    save_combined=config.save_combined,
                 )
             )
 
         stats_path = save_records(
-            output_dir / "image_frame_logits_stats",
+            output_dir / "stats",
             records,
             config.export_format,
         )
@@ -198,6 +207,8 @@ class ImageFrameLogitsWorkflow(BaseWorkflow):
         used_fallback_prompt: bool,
         tracking_method: str,
         fps: float | None,
+        output_dir: Path,
+        save_combined: bool,
     ) -> dict[str, object]:
         centroid = get_centroid(mask)
         pole = get_pole_of_inaccessibility(mask)
@@ -210,8 +221,16 @@ class ImageFrameLogitsWorkflow(BaseWorkflow):
 
         record: dict[str, object] = {
             "frame_index": frame_index,
+            "frame_id": frame_index,
             "time_seconds": time_seconds,
             "source": str(frame_path),
+            "source_name": frame_path.name,
+            "mask_path": mask_frame_path(output_dir, frame_index).relative_to(output_dir).as_posix(),
+            "combined_path": (
+                combined_frame_path(output_dir, frame_index).relative_to(output_dir).as_posix()
+                if save_combined
+                else ""
+            ),
             "area_px": area_px,
             "sam_score": score,
             "used_mask_input": used_mask_input,

@@ -6,10 +6,7 @@ from typing import Iterable
 import numpy as np
 
 from .local import save_video
-
-
-def combined_video_path(output_dir: Path) -> Path:
-    return output_dir / "combined_video.mp4"
+from .series_outputs import combined_video_path
 
 
 def save_combined_video(

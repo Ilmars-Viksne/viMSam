@@ -36,6 +36,20 @@ Raw files default to headerless 16-bit unsigned 1024x1024 input. Use `--raw-widt
 - Combined images show point/box prompts only when both `--save-combined` and `--show-prompts` are used.
 - For time-series workflows, combined frames show the prompt used for the current frame, such as propagated centroid, pole, or box.
 
+Series workflows (`raw_timeseries`, `raw_timeseries_logits`, `image_frames_logits`, and `video`) write clean mask frames under `masks/` and combined diagnostic frames under `combined/` only when `--save-combined` is set. `--save-combined-video` writes `combined_video.mp4` at the output root without requiring `combined/` PNGs.
+
+```text
+output/
+  masks/
+    frame_00000.png
+    frame_00001.png
+  combined/
+    frame_00000_combined.png
+    frame_00001_combined.png
+  stats.csv
+  combined_video.mp4
+```
+
 Example:
 
 ```bash

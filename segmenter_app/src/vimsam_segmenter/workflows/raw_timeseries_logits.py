@@ -8,6 +8,11 @@ from tqdm import tqdm
 from ..core.config import SegmentationResult, WorkflowConfig
 from ..io.local import output_dir_for, save_image, save_records
 from ..io.raw import get_raw_timeseries_files, read_u3cmos_raw, validate_raw_timeseries_files
+from ..io.series_outputs import (
+    combined_frame_path,
+    ensure_series_output_dirs,
+    mask_frame_path,
+)
 from ..io.video_outputs import save_combined_video
 from ..processing.preprocess import PreProcessor
 from ..tracking.logit_propagation import LogitPropagationTracker
@@ -70,6 +75,7 @@ class RawTimeSeriesLogitsWorkflow(BaseWorkflow):
         fps = self._fps_from_config_metadata(config)
         previous_centroid: tuple[int, int] | None = None
         previous_area: int | None = None
+        ensure_series_output_dirs(output_dir, save_combined=config.save_combined)
 
         for frame_index, raw_path in enumerate(tqdm(raw_files, desc="Raw logit propagation")):
             raw_image = read_u3cmos_raw(raw_path, width=config.raw_width, height=config.raw_height)
@@ -88,8 +94,8 @@ class RawTimeSeriesLogitsWorkflow(BaseWorkflow):
 
             mask = result.mask
 
-            mask_output_path = output_dir / f"{raw_path.stem}_mask.png"
-            combined_output_path = output_dir / f"{raw_path.stem}_combined.png"
+            mask_output_path = mask_frame_path(output_dir, frame_index)
+            combined_output_path = combined_frame_path(output_dir, frame_index)
 
             mask_image = create_visualization(
                 processed,
@@ -146,6 +152,8 @@ class RawTimeSeriesLogitsWorkflow(BaseWorkflow):
                 fps=fps,
                 previous_centroid=previous_centroid,
                 previous_area=previous_area,
+                output_dir=output_dir,
+                save_combined=config.save_combined,
             )
 
             records.append(record)
@@ -154,7 +162,7 @@ class RawTimeSeriesLogitsWorkflow(BaseWorkflow):
             previous_area = int(np.sum(mask))
 
         stats_path = save_records(
-            output_dir / "raw_timeseries_logits_stats",
+            output_dir / "stats",
             records,
             config.export_format,
         )
@@ -224,6 +232,8 @@ class RawTimeSeriesLogitsWorkflow(BaseWorkflow):
         fps: float | None,
         previous_centroid: tuple[int, int] | None,
         previous_area: int | None,
+        output_dir: Path,
+        save_combined: bool,
     ) -> dict[str, object]:
         centroid = get_centroid(mask)
         pole = get_pole_of_inaccessibility(mask)
@@ -255,8 +265,16 @@ class RawTimeSeriesLogitsWorkflow(BaseWorkflow):
 
         record: dict[str, object] = {
             "frame_index": frame_index,
+            "frame_id": frame_index,
             "time_seconds": time_seconds,
             "source": str(raw_path),
+            "source_name": raw_path.name,
+            "mask_path": mask_frame_path(output_dir, frame_index).relative_to(output_dir).as_posix(),
+            "combined_path": (
+                combined_frame_path(output_dir, frame_index).relative_to(output_dir).as_posix()
+                if save_combined
+                else ""
+            ),
             "area_px": area_px,
             "area_change_px": area_change_px,
             "area_change_fraction": area_change_fraction,

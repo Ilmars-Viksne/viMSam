@@ -9,9 +9,12 @@ from ..io.local import (
     read_metadata,
     save_image,
     save_records,
-    save_video,
     stream_video,
-    write_video_streams,
+)
+from ..io.series_outputs import (
+    combined_frame_path,
+    ensure_series_output_dirs,
+    mask_frame_path,
 )
 from ..io.video_outputs import save_combined_video
 from ..processing.preprocess import PreProcessor
@@ -42,6 +45,7 @@ class VideoFileWorkflow(BaseWorkflow):
         frame_count = 0
         combined_video_frames: list[np.ndarray] = []
         need_combined_frame = config.save_combined or config.save_combined_video
+        ensure_series_output_dirs(output_dir, save_combined=config.save_combined)
 
         logger.info("Starting video processing. Tracking: %s", is_tracking)
 
@@ -85,7 +89,21 @@ class VideoFileWorkflow(BaseWorkflow):
                         iou = float(ious[0])
                     else:
                         current_mask = np.zeros(processed_frame.shape[:2], dtype=bool)
-                    stats.collect(current_mask, iou, i, 1)
+                    stats.collect(
+                        current_mask,
+                        iou,
+                        i,
+                        1,
+                        meta={
+                            "source_name": config.input_path.name,
+                            "mask_path": mask_frame_path(output_dir, i).relative_to(output_dir).as_posix(),
+                            "combined_path": (
+                                combined_frame_path(output_dir, i).relative_to(output_dir).as_posix()
+                                if config.save_combined
+                                else ""
+                            ),
+                        },
+                    )
                     result = current_mask
                 else:
                     amg = automatic_mask_generator(predictor)
@@ -99,7 +117,7 @@ class VideoFileWorkflow(BaseWorkflow):
                     save_combined=False,
                     show_prompts=False,
                 )
-                outputs.append(save_image(output_dir / f"frame_{i:05d}.png", mask_viz))
+                outputs.append(save_image(mask_frame_path(output_dir, i), mask_viz))
 
                 if need_combined_frame:
                     combined_viz = create_visualization(
@@ -110,7 +128,7 @@ class VideoFileWorkflow(BaseWorkflow):
                         show_prompts=config.show_prompts,
                     )
                     if config.save_combined:
-                        outputs.append(save_image(output_dir / f"frame_{i:05d}_combined.png", combined_viz))
+                        outputs.append(save_image(combined_frame_path(output_dir, i), combined_viz))
                     if config.save_combined_video:
                         combined_video_frames.append(combined_viz)
                     if config.save_combined:
@@ -128,7 +146,7 @@ class VideoFileWorkflow(BaseWorkflow):
         if config.save_combined_video:
             outputs.append(save_combined_video(output_dir, combined_video_frames, fps=config.fps))
 
-        stats_path = save_records(output_dir / "tracking_stats", stats.get_data(), config.export_format) if is_tracking else None
+        stats_path = save_records(output_dir / "stats", stats.get_data(), config.export_format) if is_tracking else None
         return SegmentationResult(True, frame_count, outputs=tuple(outputs), stats_path=stats_path)
 
     @staticmethod
