@@ -32,28 +32,18 @@ def validate_raw_file_size(path: Path, width: int = 1024, height: int = 1024) ->
 def read_u3cmos_raw(path: Path, width: int = 1024, height: int = 1024) -> np.ndarray:
     path = ensure_input_file(path)
     validate_raw_file_size(path, width=width, height=height)
-    
+
     try:
         data = np.fromfile(path, dtype=np.uint16)
     except OSError as exc:
         raise InputValidationError(f"Could not read raw file {path}: {exc}") from exc
 
     try:
-        image_2d = data.reshape((height, width)).astype(np.float32)
+        return data.reshape((height, width))
     except ValueError as exc:
         raise InputValidationError(
             f"Could not reshape raw file {path} to {height}x{width}"
         ) from exc
-    
-    image_2d = np.flipud(image_2d)
-
-    p1, p99 = np.percentile(image_2d, (1, 99))
-    image_2d = np.clip(image_2d, p1, p99)
-    if p99 > p1:
-        image_normalized = (image_2d - p1) / (p99 - p1) * 255.0
-    else:
-        image_normalized = np.zeros_like(image_2d)
-    return image_normalized.astype(np.uint8)
 
 
 def get_raw_timeseries_files(directory: Path) -> list[Path]:
