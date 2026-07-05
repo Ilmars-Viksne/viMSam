@@ -134,7 +134,7 @@ class RawTimeSeriesLogitsWorkflow(BaseWorkflow):
                     )
 
                 combined = create_visualization(
-                    processed,
+                    raw_image,
                     mask,
                     prompts=current_prompt_overlay if config.show_prompts else None,
                     save_combined=True,

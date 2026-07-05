@@ -29,6 +29,42 @@ def test_combined_visualization_is_rgb_uint8():
     assert result.dtype == np.uint8
 
 
+def test_combined_visualization_stretches_low_range_uint8_display():
+    image = np.arange(16, dtype=np.uint8).reshape(4, 4)
+    mask = np.zeros((4, 4), dtype=bool)
+    mask[1:3, 1:3] = True
+
+    result = create_visualization(
+        image,
+        mask,
+        save_combined=True,
+        show_prompts=False,
+    )
+
+    assert result.dtype == np.uint8
+    assert result.ndim == 3
+    assert result.shape[-1] == 3
+    assert result.max() > 100
+
+
+def test_combined_visualization_stretches_raw_uint16_display():
+    image = (np.arange(16, dtype=np.uint16).reshape(4, 4) * 10) + 1000
+    mask = np.zeros((4, 4), dtype=bool)
+    mask[1:3, 1:3] = True
+
+    result = create_visualization(
+        image,
+        mask,
+        save_combined=True,
+        show_prompts=False,
+    )
+
+    assert result.dtype == np.uint8
+    assert result.ndim == 3
+    assert result.shape[-1] == 3
+    assert result.max() > 100
+
+
 def test_visualization_rejects_mismatched_mask_shape():
     image = np.zeros((8, 8), dtype=np.uint8)
     mask = np.zeros((4, 4), dtype=bool)

@@ -123,7 +123,7 @@ class RawTimeSeriesWorkflow(BaseWorkflow):
 
                 if need_combined_frame:
                     combined_viz = create_visualization(
-                        processed_frame,
+                        frame,
                         result,
                         prompts=current_prompt_overlay if config.show_prompts else None,
                         save_combined=True,

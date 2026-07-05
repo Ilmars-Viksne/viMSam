@@ -18,21 +18,47 @@ STABLE_PALETTE = np.array(
 
 
 def _normalize_display(image: np.ndarray) -> np.ndarray:
+    rgb = _as_rgb_image(image)
+    return _contrast_stretch_to_uint8(rgb)
+
+
+def _as_rgb_image(image: np.ndarray) -> np.ndarray:
     image = np.asarray(image)
     if image.size == 0:
         raise InputValidationError("Cannot visualize an empty image")
     image = np.squeeze(image)
+
     if image.ndim == 2:
-        image = np.stack((image,) * 3, axis=-1)
-    elif image.ndim == 3 and image.shape[-1] == 4:
-        image = image[..., :3]
-    elif image.ndim != 3 or image.shape[-1] not in {1, 3}:
-        raise InputValidationError(f"Expected a 2D grayscale or RGB image, got shape {image.shape}")
+        return np.stack((image,) * 3, axis=-1)
     if image.ndim == 3 and image.shape[-1] == 1:
-        image = np.repeat(image, 3, axis=-1)
-    if image.dtype == np.uint8:
-        return np.ascontiguousarray(image)
-    return ((image - image.min()) / (image.max() - image.min() + 1e-8) * 255).astype(np.uint8)
+        return np.repeat(image, 3, axis=-1)
+    if image.ndim == 3 and image.shape[-1] == 3:
+        return image
+    if image.ndim == 3 and image.shape[-1] == 4:
+        return image[..., :3]
+
+    raise InputValidationError(f"Expected a 2D grayscale or RGB image, got shape {image.shape}")
+
+
+def _contrast_stretch_to_uint8(image: np.ndarray) -> np.ndarray:
+    image = np.asarray(image)
+    if image.size == 0:
+        raise InputValidationError("Cannot visualize an empty image")
+
+    arr = image.astype(np.float32, copy=False)
+    finite = np.isfinite(arr)
+    if not np.any(finite):
+        return np.zeros(arr.shape, dtype=np.uint8)
+
+    finite_values = arr[finite]
+    vmin = float(finite_values.min())
+    vmax = float(finite_values.max())
+    if vmax <= vmin:
+        return np.zeros(arr.shape, dtype=np.uint8)
+
+    stretched = (arr - vmin) / (vmax - vmin)
+    stretched = np.clip(stretched, 0.0, 1.0)
+    return np.ascontiguousarray((stretched * 255.0).round().astype(np.uint8))
 
 
 def _extract_masks(segmentation_result: object) -> list[np.ndarray]:

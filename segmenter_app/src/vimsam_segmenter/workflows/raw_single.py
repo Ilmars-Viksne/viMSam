@@ -79,7 +79,7 @@ class RawSingleImageWorkflow(BaseWorkflow):
                 save_image(
                     combined_path,
                     create_visualization(
-                        processed,
+                        image,
                         result,
                         prompts=current_prompt_overlay,
                         save_combined=True,
