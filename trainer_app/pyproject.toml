@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vimsam-trainer"
+version = "0.1.0"
+description = "Fine-tuning workflows for micro-SAM models on microscopy images and raw frames."
+readme = "README.md"
+requires-python = ">=3.10,<3.12"
+dependencies = [
+    "numpy>=1.26,<2",
+    "imageio",
+    "tifffile",
+    "pandas",
+    "scikit-image",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+ml = [
+    "micro_sam",
+    "torch==2.1.0",
+    "torchvision",
+]
+test = [
+    "pytest",
+]
+
+[project.scripts]
+vimsam-trainer = "vimsam_trainer.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["vimsam_trainer*"]
