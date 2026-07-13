@@ -27,6 +27,8 @@ def build_standard_stats_record(
     mask_label: int = 1,
     iou_score: float | None = None,
     has_combined: bool = False,
+    mask_output_name: str | None = None,
+    combined_output_name: str | None = None,
 ) -> dict[str, Any]:
     mask_arr = np.asarray(mask)
     binary_mask = mask_arr > 0
@@ -55,6 +57,10 @@ def build_standard_stats_record(
         "bbox_y1": bbox_y1,
         "bbox_x2": bbox_x2,
         "bbox_y2": bbox_y2,
-        "mask_name": mask_name(frame_id),
-        "combined_name": combined_name(frame_id) if has_combined else "",
+        "mask_name": mask_output_name or "",
+        "combined_name": (
+            combined_output_name
+            if has_combined and combined_output_name is not None
+            else ""
+        ),
     }

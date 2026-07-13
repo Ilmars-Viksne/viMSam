@@ -3,47 +3,134 @@ from pathlib import Path
 import pytest
 
 from vimsam_segmenter.io.series_outputs import (
-    combined_dir,
     combined_frame_path,
     combined_name,
-    combined_video_path,
     frame_stem,
-    mask_name,
+    index_stem,
     mask_frame_path,
-    masks_dir,
+    mask_name,
+    video_source_stem,
 )
 
 
-def test_frame_stem_uses_five_digits_by_default():
-    assert frame_stem(0) == "frame_00000"
-    assert frame_stem(1) == "frame_00001"
-    assert frame_stem(42) == "frame_00042"
-    assert frame_stem(1234) == "frame_01234"
+def test_index_stem_uses_eight_digits():
+    assert index_stem(0) == "00000000"
+    assert index_stem(1) == "00000001"
+    assert index_stem(42) == "00000042"
+    assert index_stem(1234) == "00001234"
 
 
-def test_frame_stem_rejects_negative_index():
+def test_index_stem_rejects_negative_index():
     with pytest.raises(ValueError):
-        frame_stem(-1)
+        index_stem(-1)
 
 
-def test_frame_names():
-    assert mask_name(0) == "frame_00000.png"
-    assert combined_name(0) == "frame_00000_combined.png"
+def test_source_frame_stem():
+    assert frame_stem(
+        frame_index=0,
+        mode="source",
+        source_path=Path("20260226213602.raw"),
+    ) == "20260226213602"
 
 
-def test_series_directories():
+def test_prefix_source_frame_stem():
+    assert frame_stem(
+        frame_index=0,
+        mode="prefix-source",
+        source_path=Path("20260226213602.raw"),
+        prefix="cell_a",
+    ) == "cell_a_20260226213602"
+
+
+def test_index_frame_stem():
+    assert frame_stem(
+        frame_index=0,
+        mode="index",
+    ) == "00000000"
+
+
+def test_prefix_index_frame_stem():
+    assert frame_stem(
+        frame_index=42,
+        mode="prefix-index",
+        prefix="cell_a",
+    ) == "cell_a_00000042"
+
+
+def test_mask_names():
+    assert mask_name(
+        frame_index=0,
+        mode="source",
+        source_path=Path("sample.tif"),
+    ) == "sample.png"
+
+    assert mask_name(
+        frame_index=0,
+        mode="prefix-source",
+        source_path=Path("sample.tif"),
+        prefix="experiment",
+    ) == "experiment_sample.png"
+
+    assert mask_name(
+        frame_index=0,
+        mode="index",
+    ) == "00000000.png"
+
+    assert mask_name(
+        frame_index=0,
+        mode="prefix-index",
+        prefix="experiment",
+    ) == "experiment_00000000.png"
+
+
+def test_combined_names():
+    assert combined_name(
+        frame_index=0,
+        mode="source",
+        source_path=Path("sample.tif"),
+    ) == "sample_combined.png"
+
+    assert combined_name(
+        frame_index=0,
+        mode="index",
+    ) == "00000000_combined.png"
+
+
+def test_series_frame_paths():
     output_dir = Path("output")
 
-    assert masks_dir(output_dir) == Path("output/masks")
-    assert combined_dir(output_dir) == Path("output/combined")
+    assert mask_frame_path(
+        output_dir,
+        frame_index=0,
+        mode="source",
+        source_path=Path("sample.tif"),
+    ) == Path("output/masks/sample.png")
+
+    assert combined_frame_path(
+        output_dir,
+        frame_index=0,
+        mode="prefix-index",
+        prefix="cell",
+    ) == Path(
+        "output/combined/cell_00000000_combined.png"
+    )
 
 
-def test_frame_paths():
-    output_dir = Path("output")
+def test_prefix_mode_requires_prefix():
+    with pytest.raises(ValueError):
+        frame_stem(
+            frame_index=0,
+            mode="prefix-index",
+        )
 
-    assert mask_frame_path(output_dir, 0) == Path("output/masks/frame_00000.png")
-    assert combined_frame_path(output_dir, 0) == Path("output/combined/frame_00000_combined.png")
 
+def test_video_virtual_source_stem():
+    assert video_source_stem(
+        Path("moving_cell.mp4"),
+        0,
+    ) == "moving_cell_00000000"
 
-def test_combined_video_path():
-    assert combined_video_path(Path("output")) == Path("output/combined_video.mp4")
+    assert video_source_stem(
+        Path("moving_cell.mp4"),
+        42,
+    ) == "moving_cell_00000042"

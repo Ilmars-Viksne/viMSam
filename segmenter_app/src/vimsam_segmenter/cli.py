@@ -127,6 +127,36 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Comma-separated user time list in seconds, for example: 0,23,46.",
     )
+
+    parser.add_argument(
+        "--frame-name-mode",
+        choices=[
+            "source",
+            "prefix-source",
+            "index",
+            "prefix-index",
+        ],
+        default="source",
+        help=(
+            "Naming scheme for mask and combined series frames. "
+            "'source' uses the source frame stem; "
+            "'prefix-source' uses PREFIX_SOURCE; "
+            "'index' uses an eight-digit zero-based index; "
+            "'prefix-index' uses PREFIX_INDEX."
+        ),
+    )
+
+    parser.add_argument(
+        "--frame-name-prefix",
+        default=None,
+        help=(
+            "Prefix used by the prefix-source and prefix-index "
+            "frame naming modes."
+        ),
+    )
+
+
+
     return parser
 
 
@@ -158,6 +188,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             fps=args.fps,
             timestamp_format=args.timestamp_format or None,
             time_seconds=args.time_seconds,
+            frame_name_mode=args.frame_name_mode,
+            frame_name_prefix=args.frame_name_prefix,
             model=ModelConfig(
                 model_type=args.model_type,
                 device=args.device,

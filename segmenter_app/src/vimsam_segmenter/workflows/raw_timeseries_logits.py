@@ -99,8 +99,21 @@ class RawTimeSeriesLogitsWorkflow(BaseWorkflow):
 
             mask = result.mask
 
-            mask_output_path = mask_frame_path(output_dir, frame_index)
-            combined_output_path = combined_frame_path(output_dir, frame_index)
+            mask_output_path = mask_frame_path(
+                output_dir,
+                frame_index=frame_index,
+                mode=config.frame_name_mode,
+                source_path=raw_path,
+                prefix=config.frame_name_prefix,
+            )
+
+            combined_output_path = combined_frame_path(
+                output_dir,
+                frame_index=frame_index,
+                mode=config.frame_name_mode,
+                source_path=raw_path,
+                prefix=config.frame_name_prefix,
+            )            
 
             mask_image = create_visualization(
                 processed,
@@ -155,6 +168,12 @@ class RawTimeSeriesLogitsWorkflow(BaseWorkflow):
                     mask_label=1,
                     iou_score=result.score,
                     has_combined=config.save_combined,
+                    mask_output_name=mask_output_path.name,
+                    combined_output_name=(
+                        combined_output_path.name
+                        if config.save_combined
+                        else None
+                    ),
                 )
             )
 

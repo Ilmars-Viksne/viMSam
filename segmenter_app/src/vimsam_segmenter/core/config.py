@@ -18,6 +18,12 @@ TRACKING_METHODS = {"box", "centroid", "pole"}
 EXPORT_FORMATS = {"csv", "json"}
 PREPROCESSING_METHODS = {"fixed_16bit", "minmax", "percentile", "none"}
 
+FRAME_NAME_MODES = {
+    "source",
+    "prefix-source",
+    "index",
+    "prefix-index",
+}
 
 def normalize_path(path: Path | str) -> Path:
     return Path(path).expanduser().resolve(strict=False)
@@ -81,6 +87,8 @@ class WorkflowConfig:
     fps: float | None = None
     timestamp_format: str | None = "%Y%m%d%H%M%S"
     time_seconds: tuple[float, ...] | None = None
+    frame_name_mode: str = "source"
+    frame_name_prefix: str | None = None
 
 
     def __post_init__(self) -> None:
@@ -100,6 +108,42 @@ class WorkflowConfig:
                 f"export_format must be one of {sorted(EXPORT_FORMATS)}, "
                 f"got {self.export_format!r}"
             )
+
+        if self.frame_name_mode not in FRAME_NAME_MODES:
+            allowed = ", ".join(sorted(FRAME_NAME_MODES))
+            raise InputValidationError(
+                f"frame_name_mode must be one of: {allowed}"
+            )
+
+        if self.frame_name_prefix is not None:
+            self.frame_name_prefix = self.frame_name_prefix.strip()
+
+            if not self.frame_name_prefix:
+                self.frame_name_prefix = None
+
+        if self.frame_name_mode in {"prefix-source", "prefix-index"}:
+            if self.frame_name_prefix is None:
+                raise InputValidationError(
+                    f"frame_name_prefix is required when "
+                    f"frame_name_mode='{self.frame_name_mode}'."
+                )
+
+        if self.frame_name_prefix is not None:
+            self.frame_name_prefix = self.frame_name_prefix.strip()
+
+            if not self.frame_name_prefix:
+                self.frame_name_prefix = None
+            elif "/" in self.frame_name_prefix or "\\" in self.frame_name_prefix:
+                raise InputValidationError(
+                    "frame_name_prefix must not contain path separators."
+                )
+
+        if self.frame_name_mode in {"prefix-source", "prefix-index"}:
+            if self.frame_name_prefix is None:
+                raise InputValidationError(
+                    f"frame_name_prefix is required when "
+                    f"frame_name_mode='{self.frame_name_mode}'."
+                )
 
         self.preprocessing_method = self.preprocessing_method.strip().lower()
         if self.preprocessing_method not in PREPROCESSING_METHODS:
