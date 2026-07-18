@@ -159,6 +159,13 @@ class MicroSamFineTuner:
             image = preprocessor.run(image)
             mask = self._normalize_mask(imageio.imread(pair.mask_path))
 
+            if image.shape[:2] != mask.shape:
+                raise ValueError(
+                    f"Image/mask shape mismatch for {pair.image_path.name}: "
+                    f"image shape is {image.shape[:2]}, "
+                    f"mask shape is {mask.shape}."
+                )
+
             imageio.imwrite(image_out, np.ascontiguousarray(image))
             imageio.imwrite(mask_out, np.ascontiguousarray(mask))
             prepared_images.append(str(image_out))
@@ -168,15 +175,122 @@ class MicroSamFineTuner:
 
     @staticmethod
     def _normalize_mask(mask: np.ndarray) -> np.ndarray:
+        """
+        Convert a mask to a 2D uint32 instance-label image.
+
+        Supported inputs:
+        - (H, W): grayscale or label mask
+        - (H, W, 1): single-channel mask
+        - (H, W, 3): RGB mask
+        - (H, W, 4): RGBA mask; alpha is ignored
+        - (1, H, W), (3, H, W), (4, H, W): channel-first variants
+
+        For RGB masks:
+        - If all RGB channels are identical, the first channel is used.
+        - Otherwise, each unique RGB color is converted to an instance ID.
+        - Black is treated as background label 0.
+        """
         mask = np.asarray(mask)
+
+        # Remove dimensions whose size is one, for example (H, W, 1).
         mask = np.squeeze(mask)
+
+        # Convert channel-first masks, such as (3, H, W), to channel-last.
+        if (
+            mask.ndim == 3
+            and mask.shape[0] in (1, 3, 4)
+            and mask.shape[-1] not in (1, 3, 4)
+        ):
+            mask = np.moveaxis(mask, 0, -1)
+
+        if mask.ndim == 3:
+            if mask.shape[-1] not in (1, 3, 4):
+                raise ValueError(
+                    "Expected a 2D mask or an RGB/RGBA mask, "
+                    f"got shape {mask.shape}"
+                )
+
+            if mask.shape[-1] == 1:
+                mask = mask[..., 0]
+            else:
+                # Ignore alpha if this is an RGBA mask.
+                rgb = mask[..., :3]
+
+                # Many grayscale TIFF masks are stored as RGB with the same
+                # value repeated in all three channels.
+                if (
+                    np.array_equal(rgb[..., 0], rgb[..., 1])
+                    and np.array_equal(rgb[..., 0], rgb[..., 2])
+                ):
+                    mask = rgb[..., 0]
+                else:
+                    mask = MicroSamFineTuner._rgb_mask_to_instances(rgb)
+
         if mask.ndim != 2:
-            raise ValueError(f"Expected 2D mask, got shape {mask.shape}")
+            raise ValueError(
+                f"Expected a 2D mask after normalization, got shape {mask.shape}"
+            )
+
         if mask.dtype == bool:
-            return mask.astype(np.uint32)
+            return np.ascontiguousarray(mask.astype(np.uint32))
+
         if np.issubdtype(mask.dtype, np.integer):
-            return mask.astype(np.uint32)
-        return (mask > 0).astype(np.uint32)
+            if np.issubdtype(mask.dtype, np.signedinteger) and np.any(mask < 0):
+                raise ValueError("Mask labels must not contain negative values")
+
+            mask = mask.astype(np.uint32, copy=False)
+
+            # Normalize ordinary binary masks, such as {0, 255}, to {0, 1}.
+            unique_values = np.unique(mask)
+            if unique_values.size <= 2 and 0 in unique_values:
+                mask = (mask != 0).astype(np.uint32)
+
+            return np.ascontiguousarray(mask)
+
+        if np.issubdtype(mask.dtype, np.floating):
+            if not np.all(np.isfinite(mask)):
+                raise ValueError("Mask contains NaN or infinite values")
+
+            # Preserve integer-valued floating-point instance masks.
+            if np.all(mask >= 0) and np.all(mask == np.floor(mask)):
+                return np.ascontiguousarray(mask.astype(np.uint32))
+
+            # Otherwise interpret the floating-point mask as binary.
+            return np.ascontiguousarray((mask > 0).astype(np.uint32))
+
+        raise ValueError(f"Unsupported mask dtype: {mask.dtype}")
+
+    @staticmethod
+    def _rgb_mask_to_instances(rgb: np.ndarray) -> np.ndarray:
+        """
+        Convert a color-coded RGB mask to a 2D instance-label mask.
+
+        Black (0, 0, 0) is background. Every other unique color receives
+        a positive integer label.
+        """
+        rgb = np.asarray(rgb)
+
+        if rgb.ndim != 3 or rgb.shape[-1] != 3:
+            raise ValueError(f"Expected an RGB mask, got shape {rgb.shape}")
+
+        height, width, _ = rgb.shape
+        pixels = np.ascontiguousarray(rgb).reshape(-1, 3)
+
+        colors, inverse = np.unique(pixels, axis=0, return_inverse=True)
+
+        labels_for_colors = np.zeros(len(colors), dtype=np.uint32)
+        next_label = 1
+
+        for color_index, color in enumerate(colors):
+            if np.all(color == 0):
+                # Black remains background.
+                continue
+
+            labels_for_colors[color_index] = next_label
+            next_label += 1
+
+        instance_mask = labels_for_colors[inverse].reshape(height, width)
+        return np.ascontiguousarray(instance_mask)
 
     @staticmethod
     def _write_summary(

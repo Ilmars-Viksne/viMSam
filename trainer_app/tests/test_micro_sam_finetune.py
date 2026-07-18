@@ -10,6 +10,94 @@ from vimsam_trainer.core.config import TrainingConfig
 from vimsam_trainer.data.pairs import ImageMaskPair
 from vimsam_trainer.training.micro_sam_finetune import MicroSamFineTuner
 
+def test_normalize_mask_accepts_repeated_rgb_channels():
+    labels = np.array(
+        [
+            [0, 1, 1],
+            [0, 2, 2],
+        ],
+        dtype=np.uint8,
+    )
+    rgb_mask = np.repeat(labels[..., None], 3, axis=-1)
+
+    result = MicroSamFineTuner._normalize_mask(rgb_mask)
+
+    assert result.shape == labels.shape
+    assert result.dtype == np.uint32
+    assert np.array_equal(result, labels.astype(np.uint32))
+
+
+def test_normalize_mask_converts_binary_rgb_to_zero_and_one():
+    binary = np.array(
+        [
+            [0, 255],
+            [255, 0],
+        ],
+        dtype=np.uint8,
+    )
+    rgb_mask = np.repeat(binary[..., None], 3, axis=-1)
+
+    result = MicroSamFineTuner._normalize_mask(rgb_mask)
+
+    assert result.shape == binary.shape
+    assert result.dtype == np.uint32
+    assert set(np.unique(result)) == {0, 1}
+
+
+def test_normalize_mask_converts_rgb_colors_to_instance_ids():
+    rgb_mask = np.array(
+        [
+            [[0, 0, 0], [255, 0, 0], [255, 0, 0]],
+            [[0, 0, 0], [0, 255, 0], [0, 255, 0]],
+        ],
+        dtype=np.uint8,
+    )
+
+    result = MicroSamFineTuner._normalize_mask(rgb_mask)
+
+    assert result.shape == (2, 3)
+    assert result.dtype == np.uint32
+    assert result[0, 0] == 0
+    assert result[1, 0] == 0
+    assert result[0, 1] == result[0, 2]
+    assert result[1, 1] == result[1, 2]
+    assert result[0, 1] != result[1, 1]
+    assert set(np.unique(result)) == {0, 1, 2}
+
+
+def test_normalize_mask_accepts_rgba():
+    rgba_mask = np.array(
+        [
+            [[0, 0, 0, 255], [255, 0, 0, 255]],
+            [[0, 0, 0, 255], [0, 255, 0, 255]],
+        ],
+        dtype=np.uint8,
+    )
+
+    result = MicroSamFineTuner._normalize_mask(rgba_mask)
+
+    assert result.shape == (2, 2)
+    assert result.dtype == np.uint32
+    assert result[0, 0] == 0
+    assert result[1, 0] == 0
+    assert result[0, 1] != result[1, 1]
+
+
+def test_normalize_mask_accepts_channel_first_rgb():
+    labels = np.array(
+        [
+            [0, 1],
+            [2, 2],
+        ],
+        dtype=np.uint8,
+    )
+    channel_first = np.repeat(labels[None, ...], 3, axis=0)
+
+    result = MicroSamFineTuner._normalize_mask(channel_first)
+
+    assert result.shape == labels.shape
+    assert np.array_equal(result, labels.astype(np.uint32))
+
 
 def test_micro_sam_finetuner_passes_required_loader_and_save_root(monkeypatch, tmp_path):
     images = tmp_path / "images"
