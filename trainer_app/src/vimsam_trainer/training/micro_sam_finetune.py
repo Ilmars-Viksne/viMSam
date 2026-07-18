@@ -157,45 +157,106 @@ class MicroSamFineTuner:
                 image = imageio.imread(pair.image_path)
 
             image = preprocessor.run(image)
-            mask = self._normalize_mask(imageio.imread(pair.mask_path))
+
+            mask = self._normalize_mask(
+                imageio.imread(pair.mask_path),
+                min_size=config.min_size,
+            )
 
             if image.shape[:2] != mask.shape:
                 raise ValueError(
-                    f"Image/mask shape mismatch for {pair.image_path.name}: "
-                    f"image shape is {image.shape[:2]}, "
-                    f"mask shape is {mask.shape}."
+                    f"Image/mask shape mismatch for "
+                    f"{pair.image_path.name}: "
+                    f"image={image.shape[:2]}, "
+                    f"mask={mask.shape}"
                 )
 
-            imageio.imwrite(image_out, np.ascontiguousarray(image))
-            imageio.imwrite(mask_out, np.ascontiguousarray(mask))
+            self._validate_prepared_mask(
+                mask,
+                path=pair.mask_path,
+                min_size=config.min_size,
+            )
+
+            imageio.imwrite(
+                image_out,
+                np.ascontiguousarray(image),
+            )
+            imageio.imwrite(
+                mask_out,
+                np.ascontiguousarray(mask),
+            )
+
             prepared_images.append(str(image_out))
             prepared_masks.append(str(mask_out))
 
         return prepared_images, prepared_masks
 
+
     @staticmethod
-    def _normalize_mask(mask: np.ndarray) -> np.ndarray:
-        """
-        Convert a mask to a 2D uint32 instance-label image.
+    def _validate_prepared_mask(
+        mask: np.ndarray,
+        *,
+        path: Path,
+        min_size: int,
+    ) -> None:
+        labels, counts = np.unique(
+            mask,
+            return_counts=True,
+        )
 
-        Supported inputs:
-        - (H, W): grayscale or label mask
-        - (H, W, 1): single-channel mask
-        - (H, W, 3): RGB mask
-        - (H, W, 4): RGBA mask; alpha is ignored
-        - (1, H, W), (3, H, W), (4, H, W): channel-first variants
+        foreground = labels != 0
+        foreground_labels = labels[foreground]
+        foreground_sizes = counts[foreground]
 
-        For RGB masks:
-        - If all RGB channels are identical, the first channel is used.
-        - Otherwise, each unique RGB color is converted to an instance ID.
-        - Black is treated as background label 0.
+        if foreground_labels.size == 0:
+            raise ValueError(
+                f"Mask {path.name} contains no foreground instances"
+            )
+
+        valid = foreground_sizes >= min_size
+
+        if not np.any(valid):
+            raise ValueError(
+                f"Mask {path.name} contains foreground objects, "
+                f"but none has at least {min_size} pixels. "
+                f"Object sizes: {foreground_sizes.tolist()}"
+            )
+
+        logger.info(
+            "Prepared mask %s: shape=%s, instances=%d, "
+            "foreground_pixels=%d, smallest=%d, largest=%d",
+            path.name,
+            mask.shape,
+            len(foreground_labels),
+            int(foreground_sizes.sum()),
+            int(foreground_sizes.min()),
+            int(foreground_sizes.max()),
+        )
+
+    @staticmethod
+    def _normalize_mask(
+        mask: np.ndarray,
+        *,
+        min_size: int = 1,
+    ) -> np.ndarray:
         """
+        Convert grayscale, RGB, or RGBA masks into a 2D uint32
+        instance-label mask.
+
+        Background:
+            black / zero -> 0
+
+        Foreground:
+            each connected foreground component -> 1, 2, 3, ...
+        """
+        from skimage.measure import label
+        from skimage.morphology import remove_small_objects
+        from skimage.segmentation import relabel_sequential
+
         mask = np.asarray(mask)
-
-        # Remove dimensions whose size is one, for example (H, W, 1).
         mask = np.squeeze(mask)
 
-        # Convert channel-first masks, such as (3, H, W), to channel-last.
+        # Convert channel-first masks such as (3, H, W) to (H, W, 3).
         if (
             mask.ndim == 3
             and mask.shape[0] in (1, 3, 4)
@@ -206,59 +267,64 @@ class MicroSamFineTuner:
         if mask.ndim == 3:
             if mask.shape[-1] not in (1, 3, 4):
                 raise ValueError(
-                    "Expected a 2D mask or an RGB/RGBA mask, "
+                    "Expected a 2D, RGB, or RGBA mask, "
                     f"got shape {mask.shape}"
                 )
 
             if mask.shape[-1] == 1:
-                mask = mask[..., 0]
+                foreground = mask[..., 0] != 0
             else:
-                # Ignore alpha if this is an RGBA mask.
+                # Ignore alpha and treat any non-black RGB pixel
+                # as foreground.
                 rgb = mask[..., :3]
+                foreground = np.any(rgb != 0, axis=-1)
 
-                # Many grayscale TIFF masks are stored as RGB with the same
-                # value repeated in all three channels.
-                if (
-                    np.array_equal(rgb[..., 0], rgb[..., 1])
-                    and np.array_equal(rgb[..., 0], rgb[..., 2])
-                ):
-                    mask = rgb[..., 0]
-                else:
-                    mask = MicroSamFineTuner._rgb_mask_to_instances(rgb)
+            instances = label(foreground, connectivity=1)
 
-        if mask.ndim != 2:
+        elif mask.ndim == 2:
+            if np.issubdtype(mask.dtype, np.floating):
+                if not np.all(np.isfinite(mask)):
+                    raise ValueError(
+                        "Mask contains NaN or infinite values"
+                    )
+
+            if np.issubdtype(mask.dtype, np.signedinteger):
+                if np.any(mask < 0):
+                    raise ValueError(
+                        "Mask labels must not contain negative values"
+                    )
+
+            unique_values = np.unique(mask)
+
+            if unique_values.size <= 2:
+                # Binary mask: separate disconnected objects.
+                instances = label(mask != 0, connectivity=1)
+            else:
+                # Existing integer instance-label mask.
+                if not np.issubdtype(mask.dtype, np.integer):
+                    if not np.all(mask == np.floor(mask)):
+                        raise ValueError(
+                            "Non-binary floating-point mask labels "
+                            "must be integer-valued"
+                        )
+
+                instances = mask.astype(np.int32)
+        else:
             raise ValueError(
-                f"Expected a 2D mask after normalization, got shape {mask.shape}"
+                f"Expected a 2D, RGB, or RGBA mask, got {mask.shape}"
             )
 
-        if mask.dtype == bool:
-            return np.ascontiguousarray(mask.astype(np.uint32))
+        instances = remove_small_objects(
+            instances.astype(np.int32),
+            min_size=min_size,
+        )
 
-        if np.issubdtype(mask.dtype, np.integer):
-            if np.issubdtype(mask.dtype, np.signedinteger) and np.any(mask < 0):
-                raise ValueError("Mask labels must not contain negative values")
+        instances, _, _ = relabel_sequential(instances)
 
-            mask = mask.astype(np.uint32, copy=False)
-
-            # Normalize ordinary binary masks, such as {0, 255}, to {0, 1}.
-            unique_values = np.unique(mask)
-            if unique_values.size <= 2 and 0 in unique_values:
-                mask = (mask != 0).astype(np.uint32)
-
-            return np.ascontiguousarray(mask)
-
-        if np.issubdtype(mask.dtype, np.floating):
-            if not np.all(np.isfinite(mask)):
-                raise ValueError("Mask contains NaN or infinite values")
-
-            # Preserve integer-valued floating-point instance masks.
-            if np.all(mask >= 0) and np.all(mask == np.floor(mask)):
-                return np.ascontiguousarray(mask.astype(np.uint32))
-
-            # Otherwise interpret the floating-point mask as binary.
-            return np.ascontiguousarray((mask > 0).astype(np.uint32))
-
-        raise ValueError(f"Unsupported mask dtype: {mask.dtype}")
+        return np.ascontiguousarray(
+            instances,
+            dtype=np.uint32,
+        )
 
     @staticmethod
     def _rgb_mask_to_instances(rgb: np.ndarray) -> np.ndarray:
