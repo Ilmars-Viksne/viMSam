@@ -20,7 +20,7 @@ dependencies = [
 [project.optional-dependencies]
 ml = [
     "micro_sam",
-    "torch==2.1.0",
+    "torch>=2.4",
     "torchvision",
 ]
 test = [
