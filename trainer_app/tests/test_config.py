@@ -5,6 +5,34 @@ import pytest
 from vimsam_trainer.core.config import TrainingConfig
 from vimsam_trainer.core.errors import InputValidationError
 
+def test_training_config_accepts_min_instances_per_patch(
+    tmp_path,
+):
+    config = TrainingConfig(
+        workflow="raw_frames",
+        images_path=tmp_path / "images",
+        masks_path=tmp_path / "masks",
+        output_path=tmp_path / "out",
+        min_instances_per_patch=2,
+    )
+
+    assert config.min_instances_per_patch == 2
+
+
+def test_training_config_rejects_invalid_min_instances_per_patch(
+    tmp_path,
+):
+    with pytest.raises(
+        InputValidationError,
+        match="min_instances_per_patch must be positive",
+    ):
+        TrainingConfig(
+            workflow="raw_frames",
+            images_path=tmp_path / "images",
+            masks_path=tmp_path / "masks",
+            output_path=tmp_path / "out",
+            min_instances_per_patch=0,
+        )
 
 def test_training_config_accepts_valid_raw_workflow(tmp_path):
     config = TrainingConfig(
