@@ -55,10 +55,10 @@ class ModelService:
         logger.info("Loading MicroSAM (%s) on %s...", self.model_type, self.device)
 
         try:
-            self.predictor = micro_sam_util._get_sam_model(return_sam=False, **kwargs)
+            self.predictor = micro_sam_util.get_sam_model(return_sam=False, **kwargs)
         except TypeError as exc:
             if "return_sam" in str(exc):
-                self.predictor = micro_sam_util._get_sam_model(**kwargs)
+                self.predictor = micro_sam_util.get_sam_model(**kwargs)
             else:
                 raise
 
