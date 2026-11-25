@@ -31,7 +31,7 @@ def test_get_predictor_rejects_cuda_when_unavailable(monkeypatch):
 
     fake_micro_sam = types.ModuleType("micro_sam")
     fake_util = types.ModuleType("micro_sam.util")
-    fake_util.get_sam_model = lambda **kwargs: kwargs
+    fake_util._get_sam_model = lambda **kwargs: kwargs
     fake_micro_sam.util = fake_util
 
     monkeypatch.setitem(sys.modules, "torch", fake_torch)
@@ -49,7 +49,7 @@ def test_get_predictor_uses_auto_device_when_cuda_available(monkeypatch):
 
     fake_micro_sam = types.ModuleType("micro_sam")
     fake_util = types.ModuleType("micro_sam.util")
-    fake_util.get_sam_model = lambda **kwargs: kwargs
+    fake_util._get_sam_model = lambda **kwargs: kwargs
     fake_micro_sam.util = fake_util
 
     monkeypatch.setitem(sys.modules, "torch", fake_torch)
